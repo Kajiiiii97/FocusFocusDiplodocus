@@ -43,7 +43,7 @@ Once it's running, right-click the cat and tick **Start with Windows** so it's a
 
 Regular Firefox only keeps extensions installed permanently if Mozilla has signed them. Signing your own copy is free and takes a few minutes:
 
-1. Zip up the *contents* of the `extension` folder (select `manifest.json`, `background.js` and `icon.svg`, then right-click, **Send to**, **Compressed (zipped) folder**). Or use the `.xpi` from the build artifact.
+1. Zip up the *contents* of the `extension` folder (select `manifest.json`, `background.js` and `icon.svg`, then right-click, **Send to**, **Compressed (zipped) folder**). Or use the `.xpi` from the latest release.
 2. Go to <https://addons.mozilla.org/developers/addon/submit/distribution>, sign in, and pick **On your own**. This keeps it private; it won't be listed publicly.
 3. Upload the zip. Once it passes the automatic checks (usually a few minutes), download the signed `.xpi`.
 4. Drag the signed `.xpi` into a Firefox window and click **Add**.
