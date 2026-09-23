@@ -110,6 +110,14 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(cfg["blocked"], ["a.com"])
         self.assertNotIn("extra", cfg)
 
+    def test_old_settings_move_to_the_animated_cat(self):
+        cfg = config._clean(config._migrate({"style": "pixel", "eye_color": "#2A2226", "fur_color": "#F0A35E"}))
+        self.assertEqual(cfg["style"], "sprite")
+        self.assertEqual(cfg["eye_color"], config.DEFAULTS["eye_color"])
+        self.assertEqual(cfg["fur_color"], "#F0A35E")
+        again = config._clean(config._migrate(dict(cfg, style="minimal")))
+        self.assertEqual(again["style"], "minimal")
+
     def test_clean_checks_looks(self):
         cfg = config._clean({"fur_color": "red", "second_color": "#abcdef", "pattern": "plaid", "style": "pixel"})
         self.assertEqual(cfg["fur_color"], config.DEFAULTS["fur_color"])

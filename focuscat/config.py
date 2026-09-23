@@ -4,7 +4,7 @@ import json
 import os
 import sys
 
-from focuscat.drawing import EAR_SHAPES, EYE_STYLES, PATTERNS, STYLES, is_color
+from focuscat.drawing import EAR_SHAPES, EYE_STYLES, PATTERNS, STYLES, is_color, luminance
 
 DEFAULTS = {
     # Local port the Firefox extension talks to. Change it in background.js too if you change it here.
@@ -32,17 +32,19 @@ DEFAULTS = {
     "scale": 1.0,
     "cat_name": "Mochi",
     # Looks. All of these can be changed from the Settings window.
-    "style": "pixel",  # pixel, minimal or outlined
-    "fur_color": "#F0A35E",
-    "second_color": "#F3EAD8",
+    "style": "sprite",  # sprite (animated), pixel, minimal or outlined
+    "fur_color": "#AA6928",
+    "second_color": "#D1AB78",
     "pattern": "bib",  # solid, bib, socks or patches: where the second colour goes
-    "ear_color": "#F4A7B0",
-    "eye_color": "#2A2226",
+    "ear_color": "#9A877E",
+    "eye_color": "#D3DFE1",
     "ear_shape": "pointy",  # pointy, round or folded
     "eye_style": "big",  # content, dots or big
     "stripes": False,
     "blush": False,
     "whiskers": True,
+    # Bumped when defaults change in a way old settings files should pick up.
+    "config_version": 2,
 }
 
 CHOICES = {"style": STYLES, "ear_shape": EAR_SHAPES, "eye_style": EYE_STYLES, "pattern": PATTERNS}
@@ -104,7 +106,19 @@ def load(path=None):
         save(DEFAULTS, path)
     except (OSError, ValueError):
         pass  # broken file: fall back to defaults but don't overwrite the user's edits
-    return _clean(raw)
+    return _clean(_migrate(raw))
+
+
+def _migrate(raw):
+    if not isinstance(raw, dict) or raw.get("config_version", 1) >= 2:
+        return raw
+    # Version 2 brought the animated sprite cat. Switch to it; its eyes are drawn as small light
+    # pixels, so a very dark eye colour picked for the older styles would vanish.
+    raw = dict(raw, style="sprite", config_version=2)
+    eye = raw.get("eye_color")
+    if not is_color(eye) or luminance(eye) < 0.3:
+        raw["eye_color"] = DEFAULTS["eye_color"]
+    return raw
 
 
 def save(cfg, path=None):

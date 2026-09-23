@@ -20,19 +20,19 @@ YARN_DARK = "#4A9CC0"
 
 EAR_SHAPES = ("pointy", "round", "folded")
 EYE_STYLES = ("content", "dots", "big")
-STYLES = ("pixel", "minimal", "outlined")
+STYLES = ("sprite", "pixel", "minimal", "outlined")
 PATTERNS = tuple(pixel.PATTERNS)
 
 # Presets for the settings window: fur, inner ear, eyes, stripes, second colour, pattern.
 PRESETS = {
-    "Ginger": ("#F0A35E", "#F4A7B0", "#2A2226", False, "#F3EAD8", "bib"),
-    "Tabby": ("#E39A58", "#F4A7B0", "#2A2226", True, "#F3EAD8", "bib"),
-    "Tuxedo": ("#34343C", "#D98FA3", "#F2D15C", False, "#F4F4F4", "bib"),
-    "Calico": ("#FFF6EA", "#F4A7B0", "#2A2226", False, "#E58F46", "patches"),
-    "Gray": ("#A9B1BC", "#F4B8C4", "#2B3340", False, "#F2F2F2", "socks"),
-    "Cloud": ("#D6E4F0", "#F2C4CF", "#2E2F3A", False, "#FFFFFF", "solid"),
-    "Snow": ("#F7F5F0", "#F7B6C2", "#4F86C6", False, "#F7F5F0", "solid"),
-    "Cocoa": ("#8A5A44", "#E8A6A6", "#2A1A14", False, "#D9B99B", "socks"),
+    "Ginger": ("#AA6928", "#9A877E", "#D3DFE1", False, "#D1AB78", "bib"),
+    "Gray": ("#BDB5C8", "#9A877E", "#D3DFE1", False, "#E1DEE7", "solid"),
+    "Smoky": ("#504347", "#9A877E", "#D3DFE1", False, "#726361", "solid"),
+    "Tuxedo": ("#34343C", "#C98A9A", "#F2D15C", False, "#F4F4F4", "bib"),
+    "Orange": ("#F0A35E", "#F4A7B0", "#9BD37A", False, "#F3EAD8", "bib"),
+    "Cream": ("#F3DDB8", "#F2AEBB", "#7FB3D9", False, "#FFF6EA", "solid"),
+    "Snow": ("#F4F2EE", "#F7B6C2", "#6FA8DC", False, "#F4F2EE", "solid"),
+    "Cocoa": ("#6E4A3A", "#C98A8A", "#E8C06A", False, "#E6D3BF", "socks"),
 }
 
 _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
@@ -552,7 +552,10 @@ def blob_sleep(p, t):
 
 def portrait(p):
     """Just the head, centred on the pen's origin (for the settings window's quick picks)."""
-    if p.pal["style"] == "pixel":
+    if p.pal["style"] == "sprite":
+        from focuscat import sprites
+        sprites.portrait(p)
+    elif p.pal["style"] == "pixel":
         pixel.portrait(p)
     elif p.pal["minimal"]:
         _blob_ears(p, 0, 0, back=False)

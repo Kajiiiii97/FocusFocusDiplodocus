@@ -15,6 +15,7 @@ from tkinter import messagebox
 
 from focuscat import config, winsys
 from focuscat import drawing as d
+from focuscat import sprites
 from focuscat import watcher as w
 from focuscat.server import ReportServer
 from focuscat.settings_window import SettingsWindow
@@ -383,7 +384,14 @@ class CatApp:
         head = (0, -64)  # where the bubble points
         anchor = None
 
-        if a in ("walk", "approach"):
+        if pal["style"] == "sprite":
+            walking = self.moving or a in ("walk", "approach")
+            head = sprites.draw_action(p, a, t, self.phase if walking else 0.0, getattr(self, "play_step", None))
+            if a == "sleep":
+                d.zzz(cv, p.X(head[0]), p.Y(head[1] - 30), s, t, "#3A3340")
+            if a in ("angry", "approach") and int(t * 4) % 2 == 0:
+                sprites.anger_mark(cv, p.X(head[0] + 14 * p.f), p.Y(head[1] - 40), sprites.pixel_size(s))
+        elif a in ("walk", "approach"):
             face = {"eyes": "angry", "mouth": "frown", "ears": "back", "angry": True} if a == "approach" \
                 else {"eyes": open_eyes, "mouth": "w"}
             anchor = d.pose_walk(p, t, self.phase, face=face, amp=1.3 if a == "approach" else 1.0)
@@ -431,7 +439,7 @@ class CatApp:
             d.yarn(cv, self.W / 2 + (self.ball["x"] - self.x), self.H - 6 * s - r, r, self.ball["spin"])
 
         for h in self.hearts:
-            d.heart(cv, h["x"], h["y"], h["size"] * min(1.0, h["life"] * 1.5), pixelated=pal["style"] == "pixel")
+            d.heart(cv, h["x"], h["y"], h["size"] * min(1.0, h["life"] * 1.5), pixelated=pal["style"] in ("pixel", "sprite"))
 
         text = None
         if a == "angry":
