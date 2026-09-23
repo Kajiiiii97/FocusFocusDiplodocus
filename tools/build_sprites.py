@@ -92,6 +92,25 @@ def blaze(grid, eyes, side):
     return ["".join(r) for r in rows]
 
 
+# Frames whose eyes are closed throughout (so there's nothing to find the face from) get the
+# face blaze placed by hand, in the animation's cropped coordinates. The _l version is mirrored.
+MANUAL_BLAZE = {
+    "sleep_r": [(22, 11), (23, 11), (23, 10), (24, 10), (24, 9), (25, 8),
+                (20, 12), (21, 12), (22, 12), (23, 12), (24, 12),
+                (19, 13), (20, 13), (21, 13), (22, 13), (23, 13),
+                (20, 14), (22, 14), (23, 14), (24, 14), (25, 14),
+                (20, 15), (21, 15), (23, 15), (24, 15), (25, 15), (26, 15)],
+}
+
+
+def manual_blaze(grid, points):
+    rows = [list(line) for line in grid]
+    for x, y in points:
+        if rows[y][x] in "FS":
+            rows[y][x] = "c" if rows[y][x] == "F" else "d"
+    return ["".join(r) for r in rows]
+
+
 def cell(rows, r, c):
     return [row[c * CELL:(c + 1) * CELL] for row in rows[r * CELL:(r + 1) * CELL]]
 
@@ -137,6 +156,11 @@ def main():
                 # Two eyes showing means the head is turned toward us, whatever the body does.
                 f = blaze(f, found, 0 if found[1] - found[0] >= 4 else side)
             g = [line[left:right + 1] for line in f[top:bottom + 1]]
+            if name in MANUAL_BLAZE:
+                g = manual_blaze(g, MANUAL_BLAZE[name])
+            elif name.endswith("_l") and name[:-2] + "_r" in MANUAL_BLAZE:
+                width = len(g[0])
+                g = manual_blaze(g, [(width - 1 - x, y) for x, y in MANUAL_BLAZE[name[:-2] + "_r"]])
             if feet:
                 # Lowercase fur in the bottom three rows = paws, for the "socks" pattern.
                 low = max(i for i, line in enumerate(g) if line.strip("."))
