@@ -1,6 +1,6 @@
 # Focus Cat 🐈
 
-A little minimalist cat that lives on top of your Windows taskbar. It naps, grooms, wanders around, chases a ball of yarn, and purrs when you click it.
+A little pixel-art cat that lives on top of your Windows taskbar. It naps, grooms, wanders around, chases a ball of yarn, and purrs when you click it.
 
 But if you open YouTube Shorts (or TikTok, or Reels) and start doomscrolling, it notices. It walks over to wherever your mouse is, puffs up, and yells at you with a countdown. If you're still scrolling five minutes later, it closes the tab.
 
@@ -71,7 +71,7 @@ Right-click the cat. The top line should say "Mochi can see Firefox ✓". Then c
 
 Right-click the cat, then **Settings…**. The window has a live preview of your cat.
 
-- **Look:** pick a quick preset or choose your own fur, inner ear and eye colours, ear shape (pointy, round, folded), eye shape (content, dots, big & shiny), style (minimal or outlined), extras (stripes, blush, whiskers) and size.
+- **Look:** pick a quick preset (Ginger, Tabby, Tuxedo, Calico and more) or choose your own fur colour, a second colour for two-tone cats (as a bib, socks or patches), inner ear and eye colours, ear shape (pointy, round, folded), eye shape (content, dots, big & shiny), style (pixel, minimal or outlined), extras (stripes, blush, whiskers) and size.
 - **Doomscroll rules:** the grace period, how long until the tab gets closed, break length, and which sites count.
 
 Everything is saved to `%APPDATA%\FocusCat\config.json`. You can also edit that file directly (restart the cat afterwards). The ones the window doesn't cover:
@@ -93,8 +93,10 @@ python tools/render_poses.py out.png     # renders every pose to a PNG (needs Pi
 The code:
 
 - `focuscat/watcher.py` has the doomscroll timing rules and no UI code.
-- `focuscat/drawing.py` draws the cat with plain canvas shapes, so there are no image files.
+- `focuscat/pixel.py` has the pixel-art sprites as little text grids, so there are no image files.
+- `focuscat/drawing.py` draws the other two styles and picks the right one.
 - `focuscat/app.py` has the window, the behaviour, and the mouse handling.
+- `focuscat/settings_window.py` is the Settings window.
 - `focuscat/server.py` is the local endpoint the extension talks to.
 
 Errors get logged to `%APPDATA%\FocusCat\focuscat.log`.

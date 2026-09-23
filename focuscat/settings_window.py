@@ -10,9 +10,12 @@ from focuscat import drawing as d
 PREVIEWS = [("Chill", "sit"), ("Walk", "walk"), ("Nap", "sleep"), ("Mad", "angry"), ("Happy", "happy")]
 EAR_LABELS = [("Pointy", "pointy"), ("Round", "round"), ("Folded", "folded")]
 EYE_LABELS = [("Content", "content"), ("Dots", "dots"), ("Big & shiny", "big")]
-STYLE_LABELS = [("Minimal", "minimal"), ("Outlined", "outlined")]
-COLOR_ROWS = [("Fur", "fur_color"), ("Inner ears", "ear_color"), ("Eye color", "eye_color")]
-LOOK_KEYS = ("style", "fur_color", "ear_color", "eye_color", "ear_shape", "eye_style", "stripes", "blush", "whiskers")
+STYLE_LABELS = [("Pixel", "pixel"), ("Minimal", "minimal"), ("Outlined", "outlined")]
+PATTERN_LABELS = [("One color", "solid"), ("Bib", "bib"), ("Socks", "socks"), ("Patches", "patches")]
+COLOR_ROWS = [("Fur", "fur_color"), ("Second color", "second_color"), ("Inner ears", "ear_color"),
+              ("Eye color", "eye_color")]
+LOOK_KEYS = ("style", "fur_color", "second_color", "pattern", "ear_color", "eye_color", "ear_shape",
+             "eye_style", "stripes", "blush", "whiskers")
 
 
 class SettingsWindow:
@@ -88,7 +91,8 @@ class SettingsWindow:
             row += 1
 
         self.choice_vars = {}
-        for label, key, options in (("Ear shape", "ear_shape", EAR_LABELS), ("Eye shape", "eye_style", EYE_LABELS),
+        for label, key, options in (("Two-tone", "pattern", PATTERN_LABELS),
+                                    ("Ear shape", "ear_shape", EAR_LABELS), ("Eye shape", "eye_style", EYE_LABELS),
                                     ("Style", "style", STYLE_LABELS)):
             ttk.Label(f, text=label).grid(row=row, column=0, sticky="w", pady=(8, 0))
             var = tk.StringVar(value=self.draft[key])
@@ -128,9 +132,8 @@ class SettingsWindow:
         size = int(42 * self.k)
         cv = tk.Canvas(box, width=size, height=size, bg="#2E7DB5", highlightthickness=0, cursor="hand2")
         cv.pack()
-        look = d.make_look(dict(self.draft, fur_color=preset[0], ear_color=preset[1], eye_color=preset[2],
-                                stripes=preset[3], style="minimal", eye_style="content"))
-        d.portrait(d.Pen(cv, size / 2, size * 0.6, 0.62 * self.k, 1, look))
+        look = d.make_look(dict(self.draft, style="pixel", eye_style="big", **self._preset_values(preset)))
+        d.portrait(d.Pen(cv, size / 2, size * 0.9, 0.5 * self.k, 1, look))
         label = ttk.Label(box, text=name, font=("Segoe UI", 8), cursor="hand2")
         label.pack()
         for w in (cv, box, label):
@@ -178,8 +181,14 @@ class SettingsWindow:
             self.draft[key] = hexcode.upper()
             self._refresh_swatches()
 
+    @staticmethod
+    def _preset_values(preset):
+        fur, ear, eye, stripes, second, pattern = preset
+        return dict(fur_color=fur, ear_color=ear, eye_color=eye, stripes=stripes, second_color=second,
+                    pattern=pattern)
+
     def apply_preset(self, preset):
-        self.draft.update(fur_color=preset[0], ear_color=preset[1], eye_color=preset[2], stripes=preset[3])
+        self.draft.update(self._preset_values(preset))
         self._sync_widgets()
 
     def reset_look(self):
@@ -251,6 +260,7 @@ class SettingsWindow:
                        tail_speed=9, tail_amp=8)
         elif mode == "happy":
             d.pose_sit(p, t, face={"eyes": "happy", "mouth": "w"}, tail_speed=6, tail_amp=8)
-            d.heart(cv, w / 2 + 34 * s, h - 22 * k - 118 * s + math.sin(t * 3) * 4, 14 * s)
+            d.heart(cv, w / 2 + 34 * s, h - 22 * k - 118 * s + math.sin(t * 3) * 4, 14 * s,
+                    pixelated=look["style"] == "pixel")
         else:
             d.pose_sit(p, t, face={"eyes": "closed" if blink else "open", "mouth": "w"})

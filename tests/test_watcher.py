@@ -110,6 +110,13 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(cfg["blocked"], ["a.com"])
         self.assertNotIn("extra", cfg)
 
+    def test_clean_checks_looks(self):
+        cfg = config._clean({"fur_color": "red", "second_color": "#abcdef", "pattern": "plaid", "style": "pixel"})
+        self.assertEqual(cfg["fur_color"], config.DEFAULTS["fur_color"])
+        self.assertEqual(cfg["second_color"], "#ABCDEF")
+        self.assertEqual(cfg["pattern"], config.DEFAULTS["pattern"])
+        self.assertEqual(cfg["style"], "pixel")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,7 +4,7 @@ import json
 import os
 import sys
 
-from focuscat.drawing import EAR_SHAPES, EYE_STYLES, STYLES, is_color
+from focuscat.drawing import EAR_SHAPES, EYE_STYLES, PATTERNS, STYLES, is_color
 
 DEFAULTS = {
     # Local port the Firefox extension talks to. Change it in background.js too if you change it here.
@@ -32,19 +32,21 @@ DEFAULTS = {
     "scale": 1.0,
     "cat_name": "Mochi",
     # Looks. All of these can be changed from the Settings window.
-    "style": "minimal",  # minimal or outlined
-    "fur_color": "#D6E4F0",
-    "ear_color": "#F2C4CF",
-    "eye_color": "#2E2F3A",
+    "style": "pixel",  # pixel, minimal or outlined
+    "fur_color": "#F0A35E",
+    "second_color": "#F3EAD8",
+    "pattern": "bib",  # solid, bib, socks or patches: where the second colour goes
+    "ear_color": "#F4A7B0",
+    "eye_color": "#2A2226",
     "ear_shape": "pointy",  # pointy, round or folded
-    "eye_style": "content",  # content, dots or big
+    "eye_style": "big",  # content, dots or big
     "stripes": False,
     "blush": False,
-    "whiskers": False,
+    "whiskers": True,
 }
 
-CHOICES = {"style": STYLES, "ear_shape": EAR_SHAPES, "eye_style": EYE_STYLES}
-COLORS = ("fur_color", "ear_color", "eye_color")
+CHOICES = {"style": STYLES, "ear_shape": EAR_SHAPES, "eye_style": EYE_STYLES, "pattern": PATTERNS}
+COLORS = ("fur_color", "second_color", "ear_color", "eye_color")
 
 
 def config_dir():

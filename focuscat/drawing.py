@@ -3,13 +3,15 @@
 Every pose is drawn around a ground point (ox, oy). Local coordinates are in "cat units":
 x grows toward where the cat faces, y is negative going up. Pen handles scaling and mirroring.
 
-The minimal style is a side-on "blob" cat: every part is the same flat colour with no outline,
+The pixel style lives in pixel.py. The minimal style is a side-on "blob" cat: every part is the same flat colour with no outline,
 so the pieces melt into one silhouette and only a tiny line face stands out. The outlined
 style is a chibi cat with a big front-facing head.
 """
 
 import math
 import re
+
+from focuscat import pixel
 
 ANGRY = "#E5484D"
 HEART = "#FF6B8B"
@@ -18,18 +20,19 @@ YARN_DARK = "#4A9CC0"
 
 EAR_SHAPES = ("pointy", "round", "folded")
 EYE_STYLES = ("content", "dots", "big")
-STYLES = ("minimal", "outlined")
+STYLES = ("pixel", "minimal", "outlined")
+PATTERNS = tuple(pixel.PATTERNS)
 
-# Presets for the settings window: fur, inner ear, eyes, stripes.
+# Presets for the settings window: fur, inner ear, eyes, stripes, second colour, pattern.
 PRESETS = {
-    "Cloud": ("#D6E4F0", "#F2C4CF", "#2E2F3A", False),
-    "Ginger": ("#F2A65A", "#F7B6C2", "#3B2A20", False),
-    "Tabby": ("#E9A263", "#F7B6C2", "#3B2A20", True),
-    "Gray": ("#A9B1BC", "#F4B8C4", "#2B3340", False),
-    "Black": ("#34343C", "#D98FA3", "#F2D15C", False),
-    "White": ("#F7F5F0", "#F7B6C2", "#4F86C6", False),
-    "Cream": ("#F3DDB8", "#F2AEBB", "#4A3A2E", False),
-    "Cocoa": ("#8A5A44", "#E8A6A6", "#2A1A14", False),
+    "Ginger": ("#F0A35E", "#F4A7B0", "#2A2226", False, "#F3EAD8", "bib"),
+    "Tabby": ("#E39A58", "#F4A7B0", "#2A2226", True, "#F3EAD8", "bib"),
+    "Tuxedo": ("#34343C", "#D98FA3", "#F2D15C", False, "#F4F4F4", "bib"),
+    "Calico": ("#FFF6EA", "#F4A7B0", "#2A2226", False, "#E58F46", "patches"),
+    "Gray": ("#A9B1BC", "#F4B8C4", "#2B3340", False, "#F2F2F2", "socks"),
+    "Cloud": ("#D6E4F0", "#F2C4CF", "#2E2F3A", False, "#FFFFFF", "solid"),
+    "Snow": ("#F7F5F0", "#F7B6C2", "#4F86C6", False, "#F7F5F0", "solid"),
+    "Cocoa": ("#8A5A44", "#E8A6A6", "#2A1A14", False, "#D9B99B", "socks"),
 }
 
 _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
@@ -62,9 +65,15 @@ def make_look(cfg):
     line = mix(fur, "#FFFFFF", 0.55) if dark_fur else mix(fur, "#000000", 0.62)
     minimal = cfg["style"] == "minimal"
     return {
+        "style": cfg["style"],
         "fur": fur,
         "dark": mix(fur, "#FFFFFF", 0.12) if dark_fur else mix(fur, "#000000", 0.14),
-        "belly": mix(fur, "#FFFFFF", 0.6),
+        "belly": cfg["second_color"] if cfg["pattern"] == "bib" else mix(fur, "#FFFFFF", 0.6),
+        "second": cfg["second_color"],
+        "pattern": cfg["pattern"],
+        "px_outline": mix(fur, "#000000", 0.8),
+        "px_shade": mix(fur, "#FFFFFF", 0.18) if dark_fur else mix(fur, "#000000", 0.18),
+        "px_nose": mix(cfg["ear_color"], "#C04070", 0.35),
         "line": line,
         "outline": "" if minimal else line,
         "pink": cfg["ear_color"],
@@ -264,7 +273,9 @@ def spiky_oval(p, cx, cy, rx, ry, fill, spikes=26, t=0.0):
     p.poly(pts, fill=fill, width=2.2)
 
 
-def heart(cv, x, y, size, color=HEART):
+def heart(cv, x, y, size, color=HEART, pixelated=False):
+    if pixelated:
+        return pixel.heart(cv, x, y, size)
     pts = []
     for i in range(24):
         a = math.pi * 2 * i / 24
@@ -286,6 +297,8 @@ def yarn(cv, x, y, r, spin):
 # --- poses --------------------------------------------------------------------------------
 
 def pose_sit(p, t, face=None, puff=False, paw=0.0, groom=False, tail_speed=2.2, tail_amp=6.0, lean=0.0):
+    if p.pal["style"] == "pixel":
+        return pixel.sit(p, t, face, puff, paw, groom, tail_speed, tail_amp)
     if p.pal["minimal"]:
         return blob_stand(p, t, face, puff, paw, groom, tail_speed, tail_amp)
     pal = p.pal
@@ -316,6 +329,8 @@ def pose_sit(p, t, face=None, puff=False, paw=0.0, groom=False, tail_speed=2.2, 
 
 def pose_walk(p, t, phase, face=None, amp=1.0, crouch=0.0, wiggle=0.0, stretch=0.0):
     """Side-on body with a front-facing head. crouch lowers it for stalking, stretch is mid-pounce."""
+    if p.pal["style"] == "pixel":
+        return pixel.walk(p, t, phase, face, amp, crouch, wiggle, stretch)
     if p.pal["minimal"]:
         return blob_walk(p, t, phase, face, amp, crouch, wiggle, stretch)
     pal = p.pal
@@ -356,6 +371,8 @@ def pose_walk(p, t, phase, face=None, amp=1.0, crouch=0.0, wiggle=0.0, stretch=0
 
 
 def pose_sleep(p, t):
+    if p.pal["style"] == "pixel":
+        return pixel.sleep(p, t)
     if p.pal["minimal"]:
         return blob_sleep(p, t)
     pal = p.pal
@@ -535,7 +552,9 @@ def blob_sleep(p, t):
 
 def portrait(p):
     """Just the head, centred on the pen's origin (for the settings window's quick picks)."""
-    if p.pal["minimal"]:
+    if p.pal["style"] == "pixel":
+        pixel.portrait(p)
+    elif p.pal["minimal"]:
         _blob_ears(p, 0, 0, back=False)
         p.oval(-23, -21, 23, 21, fill=p.pal["fur"], outline="")
         blob_face(p, -4, 0)

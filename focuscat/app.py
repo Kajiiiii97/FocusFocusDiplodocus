@@ -381,46 +381,49 @@ class CatApp:
         blink = (t % 4.3) < 0.13
         open_eyes = "closed" if blink else "open"
         head = (0, -64)  # where the bubble points
+        anchor = None
 
         if a in ("walk", "approach"):
             face = {"eyes": "angry", "mouth": "frown", "ears": "back", "angry": True} if a == "approach" \
                 else {"eyes": open_eyes, "mouth": "w"}
-            d.pose_walk(p, t, self.phase, face=face, amp=1.3 if a == "approach" else 1.0)
+            anchor = d.pose_walk(p, t, self.phase, face=face, amp=1.3 if a == "approach" else 1.0)
             head = (28, -50)
         elif a == "sleep":
-            d.pose_sleep(p, t)
+            anchor = d.pose_sleep(p, t)
             d.zzz(cv, p.X(26), p.Y(-58), s, t, pal["line"])
             head = (22, -24)
         elif a == "groom":
-            d.pose_sit(p, t, face={"eyes": "closed", "mouth": "tongue"}, groom=True)
+            anchor = d.pose_sit(p, t, face={"eyes": "closed", "mouth": "tongue"}, groom=True)
         elif a == "play":
             face = {"eyes": "wide", "mouth": "o"}
             if self.play_step == "crouch":
-                d.pose_walk(p, t, 0.0, face=face, amp=0.0, crouch=1.0, wiggle=1.0)
+                anchor = d.pose_walk(p, t, 0.0, face=face, amp=0.0, crouch=1.0, wiggle=1.0)
             elif self.play_step == "pounce":
-                d.pose_walk(p, t, 0.0, face=face, amp=0.0, stretch=1.0)
+                anchor = d.pose_walk(p, t, 0.0, face=face, amp=0.0, stretch=1.0)
             else:
-                d.pose_walk(p, t, self.phase, face=face if self.moving else {"eyes": open_eyes, "mouth": "w"},
+                anchor = d.pose_walk(p, t, self.phase, face=face if self.moving else {"eyes": open_eyes, "mouth": "w"},
                             amp=1.0 if self.moving else 0.0)
             head = (28, -50)
         elif a == "sus":
-            d.pose_sit(p, t, face={"eyes": "sus", "mouth": "frown", "look": 1.0}, tail_speed=1.2, tail_amp=3)
+            anchor = d.pose_sit(p, t, face={"eyes": "sus", "mouth": "frown", "look": 1.0}, tail_speed=1.2, tail_amp=3)
         elif a == "angry":
             yelling = (t % 1.6) < 0.9
-            d.pose_sit(p, t, face={"eyes": "angry", "mouth": "yell" if yelling else "frown", "ears": "back",
+            anchor = d.pose_sit(p, t, face={"eyes": "angry", "mouth": "yell" if yelling else "frown", "ears": "back",
                                    "angry": True},
                        puff=True, paw=max(0.0, math.sin(t * 7)), tail_speed=9, tail_amp=8)
         elif a == "happy":
-            d.pose_sit(p, t, face={"eyes": "happy", "mouth": "w"}, tail_speed=6, tail_amp=8)
+            anchor = d.pose_sit(p, t, face={"eyes": "happy", "mouth": "w"}, tail_speed=6, tail_amp=8)
         elif a == "smug":
-            d.pose_sit(p, t, face={"eyes": "smug", "mouth": "smug"}, tail_speed=1.5)
+            anchor = d.pose_sit(p, t, face={"eyes": "smug", "mouth": "smug"}, tail_speed=1.5)
         elif a == "held":
-            d.pose_sit(p, t, face={"eyes": "wide", "mouth": "o"}, tail_speed=10, tail_amp=5)
+            anchor = d.pose_sit(p, t, face={"eyes": "wide", "mouth": "o"}, tail_speed=10, tail_amp=5)
         else:
             look = (self.pointer_x() - self.x) / (250 * s) * self.facing
-            d.pose_sit(p, t, face={"eyes": open_eyes, "mouth": "w", "look": max(-1.0, min(1.0, look))})
+            anchor = d.pose_sit(p, t, face={"eyes": open_eyes, "mouth": "w", "look": max(-1.0, min(1.0, look))})
 
-        if pal["minimal"]:
+        if pal["style"] == "pixel" and anchor:
+            head = anchor
+        elif pal["minimal"]:
             head = (22, -30) if a == "sleep" else (d.BLOB_HEAD[0], d.BLOB_HEAD[1] - 8)
 
         if self.ball is not None:
@@ -428,7 +431,7 @@ class CatApp:
             d.yarn(cv, self.W / 2 + (self.ball["x"] - self.x), self.H - 6 * s - r, r, self.ball["spin"])
 
         for h in self.hearts:
-            d.heart(cv, h["x"], h["y"], h["size"] * min(1.0, h["life"] * 1.5))
+            d.heart(cv, h["x"], h["y"], h["size"] * min(1.0, h["life"] * 1.5), pixelated=pal["style"] == "pixel")
 
         text = None
         if a == "angry":
@@ -619,7 +622,7 @@ def _selftest(app, server):
         elif i == len(seq):
             app.open_settings()
             win = app.settings_window
-            win.apply_preset(d.PRESETS["Black"])
+            win.apply_preset(d.PRESETS["Tuxedo"])
             win.choice_vars["ear_shape"].set("folded")
             win.choice_vars["eye_style"].set("big")
             win.size.set(1.3)
@@ -627,7 +630,7 @@ def _selftest(app, server):
                 win.mode.set(mode)
                 win.draw_preview()
             win.save()
-            assert app.cfg["fur_color"] == d.PRESETS["Black"][0] and app.cfg["ear_shape"] == "folded"
+            assert app.cfg["fur_color"] == d.PRESETS["Tuxedo"][0] and app.cfg["ear_shape"] == "folded"
             assert app.W == int(300 * 1.3 * app.dpi)
             app.root.after(400, step, i + 1)
         else:
