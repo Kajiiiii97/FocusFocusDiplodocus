@@ -31,7 +31,7 @@ Some details:
 
 ### 1. Get the cat running
 
-**Easiest option:** grab `FocusCat.exe` from the latest run of the [build workflow](../../actions/workflows/build.yml) (open the run, then download the `FocusCat-windows` artifact). The artifact also has the extension as `focus-cat-link.xpi`.
+**Easiest option:** download [`FocusCat.exe`](../../releases/latest/download/FocusCat.exe) from the [latest release](../../releases/latest). The extension is there too, as `focus-cat-link.xpi`. Windows will probably say "Windows protected your PC" the first time because the exe isn't code-signed. Click **More info**, then **Run anyway**.
 
 **Or run it from source:** install Python 3.10+ from python.org (keep "tcl/tk" ticked, it is by default), then double-click `FocusCat.pyw`. No other packages are needed.
 

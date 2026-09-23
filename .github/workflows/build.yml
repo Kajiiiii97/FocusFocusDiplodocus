@@ -4,6 +4,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write  # lets the build publish a release with the exe attached
+
 jobs:
   windows:
     runs-on: windows-latest
@@ -34,5 +37,21 @@ jobs:
         with:
           name: FocusCat-windows
           path: |
+            dist/FocusCat.exe
+            dist/focus-cat-link.xpi
+      - name: Publish release
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Focus Cat (build ${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          body: |
+            **FocusCat.exe** is the cat. Save it somewhere permanent, then double-click it.
+            If Windows says "Windows protected your PC", click **More info**, then **Run anyway**.
+
+            **focus-cat-link.xpi** is the Firefox extension. See the README for how to install it.
+          files: |
             dist/FocusCat.exe
             dist/focus-cat-link.xpi
