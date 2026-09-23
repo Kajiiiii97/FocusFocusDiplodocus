@@ -39,6 +39,28 @@ class ServerTest(unittest.TestCase):
                 self.post({"url": "x"}, headers)
             self.assertEqual(ctx.exception.code, 403)
 
+    def test_preflight_allowed_for_extensions_only(self):
+        def preflight(origin):
+            req = urllib.request.Request(f"http://127.0.0.1:{self.srv.port}/report", method="OPTIONS",
+                                         headers={"Origin": origin, "Access-Control-Request-Method": "POST",
+                                                  "Access-Control-Request-Headers": "content-type,x-focus-cat"})
+            return urllib.request.urlopen(req, timeout=3)
+
+        with preflight("moz-extension://1234") as res:
+            self.assertEqual(res.status, 204)
+            self.assertEqual(res.headers["Access-Control-Allow-Origin"], "moz-extension://1234")
+            self.assertIn("X-Focus-Cat", res.headers["Access-Control-Allow-Headers"])
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            preflight("https://evil.example")
+        self.assertEqual(ctx.exception.code, 403)
+
+    def test_report_response_carries_cors_header(self):
+        req = urllib.request.Request(f"http://127.0.0.1:{self.srv.port}/report", data=b"{}", method="POST",
+                                     headers={"Content-Type": "application/json", "X-Focus-Cat": "1",
+                                              "Origin": "moz-extension://1234"})
+        with urllib.request.urlopen(req, timeout=3) as res:
+            self.assertEqual(res.headers["Access-Control-Allow-Origin"], "moz-extension://1234")
+
     def test_second_instance_cannot_bind(self):
         with self.assertRaises(OSError):
             ReportServer(self.w, self.srv.port)

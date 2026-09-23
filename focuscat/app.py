@@ -492,6 +492,9 @@ class CatApp:
         m = tk.Menu(self.root, tearoff=0)
         if st["connected"]:
             m.add_command(label=f"{name} can see Firefox ✓", state="disabled")
+            host = w.normalize(st["url"]).split("/")[0]
+            if host:
+                m.add_command(label=f"Looking at: {host}", state="disabled")
         else:
             m.add_command(label="Can't see Firefox yet (extension installed?)", state="disabled")
         if st["paused_for"] > 0:

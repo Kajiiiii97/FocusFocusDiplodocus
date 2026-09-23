@@ -11,9 +11,15 @@ ALLOWED_ORIGINS = ("moz-extension://", "chrome-extension://")
 
 def make_handler(watcher):
     class Handler(BaseHTTPRequestHandler):
+        def _extension_origin(self):
+            origin = self.headers.get("Origin") or ""
+            return origin if origin.startswith(ALLOWED_ORIGINS) else None
+
         def _send(self, code, payload):
             body = json.dumps(payload).encode("utf-8")
             self.send_response(code)
+            if self._extension_origin():
+                self.send_header("Access-Control-Allow-Origin", self._extension_origin())
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -26,6 +32,21 @@ def make_handler(watcher):
                 return False
             origin = self.headers.get("Origin")
             return origin is None or origin.startswith(ALLOWED_ORIGINS)
+
+        def do_OPTIONS(self):
+            # Firefox extensions can't be granted a host permission with a port in it, so the
+            # extension's requests go through a normal CORS preflight. Say yes to extensions only.
+            origin = self._extension_origin()
+            if self.path != "/report" or not origin:
+                self._send(403, {"error": "forbidden"})
+                return
+            self.send_response(204)
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Access-Control-Allow-Methods", "POST")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Focus-Cat")
+            self.send_header("Access-Control-Max-Age", "600")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
 
         def do_GET(self):
             if self.path == "/ping":

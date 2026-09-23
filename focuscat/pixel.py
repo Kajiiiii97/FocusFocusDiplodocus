@@ -87,12 +87,15 @@ SIT_TAILS = [
 
 # --- side-on bodies (18 wide) --------------------------------------------------------------
 
-WALK_BODY = [".OOOOOOOOOOOOOO...",
-             "OFFppFFFFFFFFFFO..",
-             "OFppppFFFFFFFFFFO.",
-             "OFFppFFFFFFFFFFFO.",
+WALK_BODY = ["...OOOOOOOOOOO....",
+             "..OFFppFFFFFFFO...",
+             ".OFppppFFFFFFFFO..",
+             "OFFFppFFFFFFFFFFO.",
+             "OFFFFFFFFFFFFFFFO.",
+             "OFFFFFFFFFFFFFFFO.",
              "OFFFFFFFcccccccFO.",
              ".OFFFFFcccccccccO.",
+             ".OFFFFccccccccccO.",
              "..OOOOOOOOOOOOOO.."]
 
 LEG = ["OFFO",
@@ -104,23 +107,29 @@ LEG = ["OFFO",
 WALK_TAILS = [
     [".OO...",
      "OttO..",
+     "OttO..",
+     "OFFO..",
      "OFFO..",
      ".OFFO.",
      "..OFFO"],
     ["..OO..",
      ".OttO.",
+     ".OttO.",
      ".OFFO.",
+     "OFFO..",
      ".OFFO.",
      "..OFFO"],
 ]
 
-LOAF = ["..OOOOOOOOOOOO....",
-        ".OFFppFFFFFFFFO...",
-        "OFppppFFFFFFFFFO..",
-        "OFFppFFFFFFFFFFO..",
+LOAF = ["...OOOOOOOOOO.....",
+        "..OFFppFFFFFFO....",
+        ".OFppppFFFFFFFO...",
+        "OFFFppFFFFFFFFFO..",
         "OFFFFFFFFFFFFFFO..",
         "OFFFFFFFFFFFFFFO..",
-        ".OOOOOOOOOOOOOO..."]
+        "OFFFFFFFFFFFFFFO..",
+        ".OFFFFFFFFFFFFFO..",
+        "..OOOOOOOOOOOOO..."]
 
 GROOM_PAW = [".OO.",
              "OkkO",
@@ -308,11 +317,11 @@ def walk(p, t, phase, face=None, amp=1.0, crouch=0.0, wiggle=0.0, stretch=0.0):
         sp.blit(LEG[:3], x0, -5)
         sp.blit(LEG[3:], x0 + sh, -2)
     tail_frame = int(t * (6 if wiggle else 2)) % 2
-    sp.blit(WALK_TAILS[tail_frame], -15 + wig, -13 + drop)
-    sp.blit(WALK_BODY, -12 + wig, -10 + drop)
+    sp.blit(WALK_TAILS[tail_frame], -15 + wig, -17 + drop)
+    sp.blit(WALK_BODY, -12 + wig, -13 + drop)
     if pal["stripes"]:
-        sp.put(0, drop, [(-6, -9, "D"), (-6, -8, "D"), (-3, -9, "D"), (-3, -8, "D"), (0, -9, "D"), (0, -8, "D")])
-    head(sp, -1, -20 + drop, pal, t=t, **face)
+        sp.put(0, drop, [(-6, -12, "D"), (-6, -11, "D"), (-3, -12, "D"), (-3, -11, "D"), (0, -12, "D"), (0, -11, "D")])
+    head(sp, -1, -23 + drop, pal, t=t, **face)
     render(p, sp)
     return _anchor(p, sp, -1)
 
@@ -324,7 +333,7 @@ def sleep(p, t):
     rows = LOAF if not breathe_in else [LOAF[0], LOAF[1]] + LOAF[1:]
     sp.blit(rows, -12, -len(rows))
     if pal["stripes"]:
-        sp.put(0, 0, [(-6, -6, "D"), (-6, -5, "D"), (-3, -6, "D"), (-3, -5, "D")])
+        sp.put(0, 0, [(-6, -8, "D"), (-6, -7, "D"), (-3, -8, "D"), (-3, -7, "D")])
     # Tail wrapped along the front.
     sp.put(0, 0, [(x, -3, "O") for x in range(-11, 1)] + [(x, -2, "F") for x in range(-11, -1)] +
            [(-1, -2, "t"), (0, -2, "t"), (1, -2, "O")])
