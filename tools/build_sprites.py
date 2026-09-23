@@ -24,6 +24,7 @@ ROLES = {
     (0xBD, 0xB5, 0xC8): "F",  # fur
     (0x93, 0x8B, 0x9E): "S",  # fur shadow
     (0xE1, 0xDE, 0xE7): "L",  # light fur (chest, highlights): the second colour on two-tone cats
+    # (c and d are fur and shadow on the face blaze, added below; f, s and l are paws.)
     (0x9A, 0x87, 0x7E): "P",  # inside of the ears
     (0xD3, 0xDF, 0xE1): "E",  # eyes
     (0xCA, 0x71, 0x9F): "M",  # mouth / tongue
@@ -41,6 +42,54 @@ ANIMS = {
     "hiss_l": (60, True), "hiss_r": (61, True),
     "happy": (65, True), "meow": (43, True),
 }
+
+
+def find_eyes(grid):
+    """(left x, right x, y) of the eye pixels on the top eye row, or None if they're closed."""
+    eyes = [(x, y) for y, line in enumerate(grid) for x, ch in enumerate(line) if ch == "E"]
+    if not eyes:
+        return None
+    top = min(y for _, y in eyes)
+    xs = [x for x, y in eyes if y <= top + 1]
+    return min(xs), max(xs), top
+
+
+def blaze(grid, eyes, side):
+    """Mark the tuxedo "curtain" on the face: fur pixels become lowercase-ish role letters
+    (c = fur, d = shadow) that two-tone cats paint in their second colour. Only colours change;
+    outlines, eyes and the silhouette stay exactly as drawn."""
+    xl, xr, ey = eyes
+    rows = [list(line) for line in grid]
+
+    def inside(x, y):
+        if side == 0:  # facing us: a point between the eyes widening over the muzzle and chest
+            cx = (xl + xr) / 2
+            if y < ey - 3:
+                return False
+            if y < ey:
+                w = (y - (ey - 3)) * 0.5 + 0.5
+            elif y <= ey + 2:
+                w = (xr - xl) / 2 - 1.5
+            elif y <= ey + 12:
+                w = (xr - xl) / 2 + 1.5
+            else:
+                return False
+            return abs(x - cx) <= w
+        # Side view: the front of the face (toward where the cat looks), then chin and chest.
+        front = (xl - x) if side < 0 else (x - xr)
+        if y < ey - 2 or y > ey + 10:
+            return False
+        if y <= ey:
+            return front >= 1
+        if y <= ey + 3:
+            return front >= -1
+        return front >= -4
+
+    for y, row in enumerate(rows):
+        for x, ch in enumerate(row):
+            if ch in "FS" and inside(x, y):
+                row[x] = "c" if ch == "F" else "d"
+    return ["".join(r) for r in rows]
 
 
 def cell(rows, r, c):
@@ -71,19 +120,27 @@ def main():
         frames = []
         for c in range(doc["width"] // CELL):
             grid = to_roles(cell(rows, r, c))
-            if any(ch != "." for line in grid for ch in line):
+            if sum(ch != "." for line in grid for ch in line) > 20:  # skip stray specks
                 frames.append(grid)
         # One bounding box for the whole animation so frames don't jitter.
         ys = [y for f in frames for y, line in enumerate(f) if line.strip(".")]
         xs = [x for f in frames for line in f for x, ch in enumerate(line) if ch != "."]
         top, bottom, left, right = min(ys), max(ys), min(xs), max(xs)
+        side = -1 if name.endswith("_l") else 1 if name.endswith("_r") else 0
+        eyes = [find_eyes(f) for f in frames]
         cropped = []
-        for f in frames:
+        for i, f in enumerate(frames):
+            # Closed eyes: borrow the eye position from the nearest frame that has them open.
+            near = sorted(range(len(frames)), key=lambda j: abs(j - i))
+            found = next((eyes[j] for j in near if eyes[j] and (side or eyes[j][1] - eyes[j][0] >= 4)), None)
+            if found:
+                # Two eyes showing means the head is turned toward us, whatever the body does.
+                f = blaze(f, found, 0 if found[1] - found[0] >= 4 else side)
             g = [line[left:right + 1] for line in f[top:bottom + 1]]
             if feet:
                 # Lowercase fur in the bottom three rows = paws, for the "socks" pattern.
                 low = max(i for i, line in enumerate(g) if line.strip("."))
-                g = [line.translate(str.maketrans("FSL", "fsl")) if i > low - 3 else line
+                g = [line.translate(str.maketrans("FSLcd", "fslfs")) if i > low - 3 else line
                      for i, line in enumerate(g)]
             cropped.append(g)
         # Head position: middle of the top few rows of the first frame.

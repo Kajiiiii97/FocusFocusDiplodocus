@@ -13,8 +13,8 @@ LOOKS = [{}, {"fur_color": "#34343C", "second_color": "#F4F4F4", "eye_color": "#
          {"fur_color": "#BDB5C8", "pattern": "solid"}]
 ACTS = [("sit", 0), ("walk", 1), ("walk", -1), ("sleep", 1), ("groom", 1), ("play:crouch", 1),
         ("play:pounce", 1), ("sus", -1), ("angry", 1), ("happy", 1), ("smug", 1), ("held", 1)]
-S = 1.0
-W, H = 110, 120
+S = float(os.environ.get("SCALE", "1.0"))
+W, H = int(110 * S), int(120 * S)
 root = tk.Tk()
 cv = tk.Canvas(root, width=W * len(ACTS), height=H * len(LOOKS), bg="#2E7DB5", highlightthickness=0)
 cv.pack()

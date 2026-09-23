@@ -51,10 +51,15 @@ def palette(look):
         light = second
     table = {"O": OUTLINE, "F": fur, "S": shadow, "L": light, "P": look["pink"], "E": look["eye"],
              "M": MOUTH, "N": MOUTH_DARK}
+    second_shadow = _mix(second, "#000000", 0.18)
     if pattern == "socks":
-        table.update(f=second, s=_mix(second, "#000000", 0.2), l=second)
+        table.update(f=second, s=second_shadow, l=second)
     else:
         table.update(f=table["F"], s=table["S"], l=table["L"])
+    if pattern == "bib":  # the tuxedo curtain up the face
+        table.update(c=second, d=second_shadow)
+    else:
+        table.update(c=table["F"], d=table["S"])
     return table
 
 
