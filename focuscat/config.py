@@ -4,6 +4,8 @@ import json
 import os
 import sys
 
+from focuscat.drawing import EAR_SHAPES, EYE_STYLES, STYLES, is_color
+
 DEFAULTS = {
     # Local port the Firefox extension talks to. Change it in background.js too if you change it here.
     "port": 47321,
@@ -28,10 +30,21 @@ DEFAULTS = {
     "break_minutes": 15,
     # Size multiplier for the cat (on top of Windows display scaling).
     "scale": 1.0,
-    # orange, gray, black, white, calico
-    "palette": "orange",
     "cat_name": "Mochi",
+    # Looks. All of these can be changed from the Settings window.
+    "style": "minimal",  # minimal or outlined
+    "fur_color": "#D6E4F0",
+    "ear_color": "#F2C4CF",
+    "eye_color": "#2E2F3A",
+    "ear_shape": "pointy",  # pointy, round or folded
+    "eye_style": "content",  # content, dots or big
+    "stripes": False,
+    "blush": False,
+    "whiskers": False,
 }
+
+CHOICES = {"style": STYLES, "ear_shape": EAR_SHAPES, "eye_style": EYE_STYLES}
+COLORS = ("fur_color", "ear_color", "eye_color")
 
 
 def config_dir():
@@ -66,6 +79,12 @@ def _clean(raw):
         elif isinstance(default, list):
             if isinstance(value, list):
                 cfg[key] = [str(v).strip() for v in value if str(v).strip()]
+        elif key in COLORS:
+            if is_color(value):
+                cfg[key] = value.upper()
+        elif key in CHOICES:
+            if value in CHOICES[key]:
+                cfg[key] = value
         else:
             cfg[key] = str(value)
     cfg["scale"] = min(max(cfg["scale"], 0.4), 4.0)

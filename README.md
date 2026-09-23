@@ -1,6 +1,6 @@
 # Focus Cat 🐈
 
-A little cartoon cat that lives on top of your Windows taskbar. It naps, grooms, wanders around, chases a ball of yarn, and purrs when you click it.
+A little minimalist cat that lives on top of your Windows taskbar. It naps, grooms, wanders around, chases a ball of yarn, and purrs when you click it.
 
 But if you open YouTube Shorts (or TikTok, or Reels) and start doomscrolling, it notices. It walks over to wherever your mouse is, puffs up, and yells at you with a countdown. If you're still scrolling five minutes later, it closes the tab.
 
@@ -64,24 +64,22 @@ Right-click the cat. The top line should say "Mochi can see Firefox ✓". Then c
   - take a 15 min break (it naps and ignores Shorts until the break is over)
   - demo mode
   - start with Windows
-  - edit or reload settings
+  - settings (how the cat looks, plus the doomscroll rules)
   - quit
 
 ## Settings
 
-Right-click the cat, then **Edit settings…**. That opens `%APPDATA%\FocusCat\config.json` in Notepad. Save it and use **Reload settings**.
+Right-click the cat, then **Settings…**. The window has a live preview of your cat.
+
+- **Look:** pick a quick preset or choose your own fur, inner ear and eye colours, ear shape (pointy, round, folded), eye shape (content, dots, big & shiny), style (minimal or outlined), extras (stripes, blush, whiskers) and size.
+- **Doomscroll rules:** the grace period, how long until the tab gets closed, break length, and which sites count.
+
+Everything is saved to `%APPDATA%\FocusCat\config.json`. You can also edit that file directly (restart the cat afterwards). The ones the window doesn't cover:
 
 | setting | default | what it does |
 | --- | --- | --- |
-| `blocked` | Shorts, TikTok, Reels | a page counts if its address contains any of these, e.g. add `"reddit.com"` |
-| `notice_after_seconds` | 15 | grace period before the cat gets mad |
-| `close_after_seconds` | 300 | countdown length once it's mad |
 | `forgive_after_seconds` | 90 | how long you have to stay away before the countdown resets |
 | `second_chance_seconds` | 60 | countdown if you go right back after a close |
-| `break_minutes` | 15 | length of the "take a break" option |
-| `palette` | `orange` | `orange`, `gray`, `black`, `white` or `calico` |
-| `scale` | 1.0 | cat size (needs a restart) |
-| `cat_name` | Mochi | for the menu |
 | `port` | 47321 | local port. If you change it, also change it in `extension/manifest.json` and `background.js` (needs a restart) |
 
 ## Development

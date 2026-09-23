@@ -1,18 +1,26 @@
-"""Dev helper: draws every pose side by side and saves a PNG (needs Pillow and a display)."""
+"""Dev helper: draws every pose side by side and saves a PNG (needs Pillow and a display).
+
+    python tools/render_poses.py out.png [key=value ...]   e.g. ear_shape=round eye_style=big
+"""
 import os
 import sys
 import tkinter as tk
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from focuscat import config  # noqa: E402
 from focuscat import drawing as d  # noqa: E402
 
 out = sys.argv[1] if len(sys.argv) > 1 else "poses.png"
-palette = sys.argv[2] if len(sys.argv) > 2 else "orange"
+overrides = dict(arg.split("=", 1) for arg in sys.argv[2:])
+for key, value in overrides.items():
+    if isinstance(config.DEFAULTS.get(key), bool):
+        overrides[key] = value.lower() in ("1", "true", "yes")
+cfg = config._clean(dict(config.DEFAULTS, **overrides))
 S = 1.4
 root = tk.Tk()
-cv = tk.Canvas(root, width=int(1500 * S / 1.4), height=int(430 * S / 1.4), bg="#cfe3f0", highlightthickness=0)
+cv = tk.Canvas(root, width=1050, height=int(430 * S / 1.4), bg="#2E7DB5", highlightthickness=0)
 cv.pack()
-pal = d.PALETTES[palette]
+pal = d.make_look(cfg)
 font = ("Segoe UI", -int(13 * S), "bold")
 
 

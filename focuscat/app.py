@@ -17,6 +17,7 @@ from focuscat import config, winsys
 from focuscat import drawing as d
 from focuscat import watcher as w
 from focuscat.server import ReportServer
+from focuscat.settings_window import SettingsWindow
 
 KEY = "#010102"  # this exact colour becomes see-through (and click-through) on Windows
 BASE_W, BASE_H = 300, 250
@@ -58,14 +59,12 @@ class CatApp:
             pass  # not Windows: you'll see a dark box, which is fine for development
         root.report_callback_exception = self._callback_error
 
-        dpi_scale = max(1.0, root.winfo_fpixels("1i") / 96.0) if winsys.IS_WIN else 1.0
-        self.s = cfg["scale"] * dpi_scale
-        self.W, self.H = int(BASE_W * self.s), int(BASE_H * self.s)
-        self.cv = tk.Canvas(root, width=self.W, height=self.H, bg=KEY, highlightthickness=0, bd=0)
+        self.dpi = max(1.0, root.winfo_fpixels("1i") / 96.0) if winsys.IS_WIN else 1.0
+        self.cv = tk.Canvas(root, bg=KEY, highlightthickness=0, bd=0)
         self.cv.pack()
-        self.font = ("Segoe UI", -int(13 * self.s), "bold")
-
-        self._refresh_area()
+        self.look = d.make_look(cfg)
+        self.settings_window = None
+        self._apply_scale()
         self.x = random.uniform(self.min_x, self.max_x)
         self.win_y = self.ground_y
         self.vy = 0.0
@@ -112,6 +111,13 @@ class CatApp:
         log_error()
         if self.selftest:
             traceback.print_exception(*exc)
+
+    def _apply_scale(self):
+        self.s = self.cfg["scale"] * self.dpi
+        self.W, self.H = int(BASE_W * self.s), int(BASE_H * self.s)
+        self.cv.config(width=self.W, height=self.H)
+        self.font = ("Segoe UI", -int(13 * self.s), "bold")
+        self._refresh_area()
 
     def _refresh_area(self):
         left, top, right, bottom = winsys.work_area(self.root)
@@ -366,7 +372,7 @@ class CatApp:
     def render(self, st):
         cv, s, t = self.cv, self.s, self.t
         cv.delete("all")
-        pal = d.PALETTES.get(self.cfg.get("palette"), d.PALETTES["orange"])
+        pal = self.look
         a = self.action
         ox, oy = self.W / 2, self.H - 6 * s - self.hop
         if a == "angry":
@@ -413,6 +419,9 @@ class CatApp:
         else:
             look = (self.pointer_x() - self.x) / (250 * s) * self.facing
             d.pose_sit(p, t, face={"eyes": open_eyes, "mouth": "w", "look": max(-1.0, min(1.0, look))})
+
+        if pal["minimal"]:
+            head = (22, -30) if a == "sleep" else (d.BLOB_HEAD[0], d.BLOB_HEAD[1] - 8)
 
         if self.ball is not None:
             r = 11 * s
@@ -493,8 +502,7 @@ class CatApp:
             self._autostart = tk.BooleanVar(value=winsys.get_autostart())
             m.add_checkbutton(label="Start with Windows", variable=self._autostart,
                               command=lambda: self._set_autostart(self._autostart.get()))
-        m.add_command(label="Edit settings…", command=lambda: winsys.open_file(config.config_path()))
-        m.add_command(label="Reload settings", command=self._reload)
+        m.add_command(label="Settings…", command=self.open_settings)
         m.add_separator()
         m.add_command(label=f"Quit (bye {name})", command=self.quit)
         # The menu needs a focusable window to close properly when you click elsewhere.
@@ -531,11 +539,22 @@ class CatApp:
             log_error()
             self.say("couldn't change that :(", 2.5)
 
-    def _reload(self):
-        fresh = config.load()
-        restart = fresh["port"] != self.cfg["port"] or fresh["scale"] != self.cfg["scale"]
-        self.cfg.update(fresh)
-        self.say("settings loaded" + (" (restart me for port/size)" if restart else " ♥"), 3)
+    def open_settings(self):
+        if self.settings_window and self.settings_window.alive():
+            self.settings_window.top.lift()
+            return
+        self.settings_window = SettingsWindow(self.root, self.cfg, self.apply_settings, ui_scale=self.dpi)
+
+    def apply_settings(self, new):
+        rescale = new["scale"] != self.cfg["scale"]
+        self.cfg.update(new)
+        if not self.selftest:
+            config.save(self.cfg)
+        self.look = d.make_look(self.cfg)
+        if rescale:
+            self._apply_scale()
+        self.start("happy", 2.5)
+        self.say("ooh, new look ♥", 2.5)
 
 
 def run_selftest_client(port, result):
@@ -582,6 +601,11 @@ def main(argv=None):
     return app.run()
 
 
+def settings_previews():
+    from focuscat.settings_window import PREVIEWS
+    return PREVIEWS
+
+
 def _selftest(app, server):
     result = {}
     seq = ["walk", "sleep", "groom", "play", "happy", "smug", "held", "sus", "sit"]
@@ -591,6 +615,20 @@ def _selftest(app, server):
             app.start(seq[i], 5)
             if seq[i] == "play":
                 app.play_step = "crouch"
+            app.root.after(400, step, i + 1)
+        elif i == len(seq):
+            app.open_settings()
+            win = app.settings_window
+            win.apply_preset(d.PRESETS["Black"])
+            win.choice_vars["ear_shape"].set("folded")
+            win.choice_vars["eye_style"].set("big")
+            win.size.set(1.3)
+            for _, mode in settings_previews():
+                win.mode.set(mode)
+                win.draw_preview()
+            win.save()
+            assert app.cfg["fur_color"] == d.PRESETS["Black"][0] and app.cfg["ear_shape"] == "folded"
+            assert app.W == int(300 * 1.3 * app.dpi)
             app.root.after(400, step, i + 1)
         else:
             app._demo()
