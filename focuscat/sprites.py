@@ -74,16 +74,15 @@ def _png(width, height, rgba_rows):
 _cache = {}
 
 
-def image(name, index, n, look):
-    """A PhotoImage of one frame, scaled up by n with crisp pixels."""
-    table = palette(look)
-    key = (name, index, n, tuple(sorted(table.items())))
+def picture(grid, table, n):
+    """A cached PhotoImage of a letter grid (see ANIMS), each letter coloured from table and
+    scaled up by n with crisp pixels. '.' is transparent."""
+    key = (tuple(grid), n, tuple(sorted(table.items())))
     img = _cache.get(key)
     if img is not None:
         return img
-    if len(_cache) > 600:
+    if len(_cache) > 800:
         _cache.clear()
-    grid = ANIMS[name]["frames"][index]
     rgb = {k: bytes(int(v[i:i + 2], 16) for i in (1, 3, 5)) + b"\xff" for k, v in table.items()}
     clear = b"\x00\x00\x00\x00"
     rows = []
@@ -94,6 +93,11 @@ def image(name, index, n, look):
     img = tk.PhotoImage(data=base64.b64encode(_png(w, h, rows)).decode())
     _cache[key] = img
     return img
+
+
+def image(name, index, n, look):
+    """A PhotoImage of one cat frame."""
+    return picture(ANIMS[name]["frames"][index], palette(look), n)
 
 
 def pixel_size(s):

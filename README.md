@@ -1,6 +1,6 @@
 # Focus Cat 🐈
 
-A little animated pixel-art cat that lives on top of your Windows taskbar. It naps, grooms, wanders around, pounces on a ball of yarn, and hops up happily when you click it.
+A little animated pixel-art cat that lives on your Windows desktop. It wanders wherever it likes, naps, grooms, pounces on toys you give it, and hops up happily when you click it.
 
 But if you open YouTube Shorts (or TikTok, or Reels) and start doomscrolling, it notices. It walks over to wherever your mouse is, puffs up, and yells at you with a countdown. If you're still scrolling five minutes later, it closes the tab.
 
@@ -59,7 +59,10 @@ Right-click the cat. The top line should say "Mochi can see Firefox ✓". Then c
 ## Things you can do with the cat
 
 - **Click it** to pet it (hearts and purring). It won't accept pets while it's mad at you.
-- **Drag it** somewhere and let go. It falls back down to the taskbar.
+- **Drag it** somewhere and let go. Drop it on its bed and it'll stay there.
+- **Give it toys** (right-click the cat, **Give a toy**): a yarn ball, a toy mouse, or a scratching post. It plays with them on its own. Drag a toy next to it, or throw one (drag and let go mid-motion), and it'll chase it right away.
+- **Give it a bed** (right-click, **Give a bed**): a cardboard box or a cushion. While there's a bed out, the cat lives in it: it sits in the box or naps on the cushion instead of wandering into your way, and only pops out to play now and then. It still comes out to yell at you if you doomscroll. Right-click the bed and put it away to let the cat roam again.
+- Toys and beds can be dragged anywhere, stay where you left them next time, and go away with a right-click.
 - **Right-click** for the menu:
   - take a 15 min break (it naps and ignores Shorts until the break is over)
   - demo mode
@@ -100,6 +103,7 @@ The code:
 - `focuscat/drawing.py` draws the other two styles and picks the right one.
 - `focuscat/app.py` has the window, the behaviour, and the mouse handling.
 - `focuscat/settings_window.py` is the Settings window.
+- `focuscat/items.py` has the toys and beds (pixel art and their little windows).
 - `focuscat/server.py` is the local endpoint the extension talks to.
 
 Errors get logged to `%APPDATA%\FocusCat\focuscat.log`.

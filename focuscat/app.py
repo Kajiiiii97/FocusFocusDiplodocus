@@ -1,4 +1,4 @@
-"""The desktop cat: a transparent always-on-top window that wanders along the taskbar."""
+"""The desktop cat: a transparent always-on-top window that wanders around the screen."""
 
 import argparse
 import json
@@ -17,6 +17,7 @@ from focuscat import config, winsys
 from focuscat import drawing as d
 from focuscat import sprites
 from focuscat import watcher as w
+from focuscat.items import BOX_BACK, BOX_FRONT, CUSHION, KINDS, SINK, Item, draw_art
 from focuscat.server import ReportServer
 from focuscat.settings_window import SettingsWindow
 
@@ -46,6 +47,8 @@ def log_error():
 
 
 class CatApp:
+    KEY = KEY
+
     def __init__(self, cfg, watcher, server, selftest=False):
         self.cfg, self.watcher, self.server, self.selftest = cfg, watcher, server, selftest
         self.errors = 0
@@ -65,19 +68,24 @@ class CatApp:
         self.cv.pack()
         self.look = d.make_look(cfg)
         self.settings_window = None
+        self.t = 0.0
+        self.items = []
+        self.home = None  # the bed the cat lives in, if you've given it one
+        self.in_home = False
         self._apply_scale()
+        left, top, right, bottom = self.area
         self.x = random.uniform(self.min_x, self.max_x)
-        self.win_y = self.ground_y
-        self.vy = 0.0
+        self.y = random.uniform(max(self.min_y, bottom - 250 * self.s), self.max_y)
         self.hop = 0.0
         self.facing = random.choice((-1, 1))
         self.phase = 0.0
         self.moving = False
-        self.t = 0.0
-        self.dragging = self.falling = False
+        self.dragging = False
         self._press = None
         self.hearts = []
-        self.ball = None
+        self.toy = None
+        self.post = None
+        self.play_step = None
         self.bubble_text, self.bubble_until = None, 0.0
         self.demo_until = 0.0
         self.action = None
@@ -91,6 +99,7 @@ class CatApp:
         self._place()
         root.update_idletasks()
         winsys.set_no_activate(root, True)
+        self._load_items()
         self._last = time.monotonic()
         root.after(FRAME_MS, self._frame)
         root.after(3000, self._housekeeping)
@@ -103,6 +112,7 @@ class CatApp:
 
     def quit(self):
         try:
+            self._save_items()
             self.server.stop()
         finally:
             self.root.destroy()
@@ -115,20 +125,28 @@ class CatApp:
 
     def _apply_scale(self):
         self.s = self.cfg["scale"] * self.dpi
+        self.px = sprites.pixel_size(self.s)
         self.W, self.H = int(BASE_W * self.s), int(BASE_H * self.s)
+        self.foot = self.H - 6 * self.s  # where the cat's feet are inside its window
         self.cv.config(width=self.W, height=self.H)
         self.font = ("Segoe UI", -int(13 * self.s), "bold")
         self._refresh_area()
+        for item in self.items:
+            item._drawn = None
+            item.refresh()
 
     def _refresh_area(self):
-        left, top, right, bottom = winsys.work_area(self.root)
-        self.min_x = left + self.W / 2
-        self.max_x = max(self.min_x, right - self.W / 2)
-        self.ground_y = bottom - self.H
+        self.area = left, top, right, bottom = winsys.work_area(self.root)
+        # (x, y) is where the cat's feet are. Keep the cat itself on screen; its speech bubble
+        # may poke off the top edge.
+        self.min_x, self.max_x = left + 25 * self.s, right - 25 * self.s
+        self.min_y, self.max_y = top + 110 * self.s, bottom - 2 * self.s
 
     def _housekeeping(self):
         # Screens change and the taskbar likes to jump in front of topmost windows.
         self._refresh_area()
+        for item in self.items:
+            item.win.attributes("-topmost", True)
         self.root.attributes("-topmost", True)
         self.root.lift()
         self.root.after(3000, self._housekeeping)
@@ -142,80 +160,227 @@ class CatApp:
         for _ in range(n):
             self.hearts.append({
                 "x": self.W / 2 + random.uniform(-30, 30) * self.s,
-                "y": self.H - random.uniform(95, 115) * self.s,
+                "y": self.foot - random.uniform(90, 110) * self.s,
                 "size": random.uniform(10, 18) * self.s,
                 "life": random.uniform(1.2, 2.0),
                 "wob": random.uniform(0, 6),
             })
 
+    # --- toys and beds --------------------------------------------------------------------
+
+    def add_item(self, kind, x=None, y=None):
+        if x is None:
+            x = self.x + self.facing * 110 * self.s
+            y = self.y
+            if not self.min_x < x < self.max_x:
+                x = self.x - self.facing * 110 * self.s
+        item = Item(self, kind, min(max(x, self.min_x), self.max_x), min(max(y, self.min_y), self.max_y))
+        self.items.append(item)
+        self.root.lift()
+        if item.home:
+            self._leave_home()
+            self.home = item
+            if self.action not in ("approach", "angry"):
+                self.say("ooh, is that for me?" if kind == "box" else "ooh, comfy", 2.5)
+                self.next_action()
+        elif item.toy and self.calm():
+            self.say("!", 1.2)
+            self.start("play", toy=item)
+        self._save_items()
+        return item
+
+    def remove_item(self, item):
+        if item is self.home:
+            self._leave_home()
+            self.home = next((i for i in reversed(self.items) if i.home and i is not item), None)
+        if item is self.toy:
+            self.toy = None
+        if item is self.post:
+            self.post = None
+        if item in self.items:
+            self.items.remove(item)
+        item.destroy()
+        if self.action in ("play", "scratch", "gohome"):
+            self.start("sit", 2)
+        self._save_items()
+
+    def clear_items(self):
+        for item in list(self.items):
+            self.remove_item(item)
+
+    def item_dropped(self, item, thrown):
+        """You let go of an item after dragging it."""
+        if item.toy and self.calm() and (thrown or math.hypot(item.x - self.x, item.y - self.y) < 250 * self.s):
+            if self.in_home:
+                self._leave_home()
+            self.say("!", 1.2)
+            self.start("play", toy=item)
+        elif item.home and item is not self.home:
+            self.home = item
+        self._save_items()
+
+    def calm(self):
+        return not self.dragging and self.action not in ("approach", "angry", "sus", "smug")
+
+    def _enter_home(self):
+        if self.home and not self.in_home:
+            self.in_home = True
+            self.home.set_hidden(True)
+            self.x, self.y = self.home.x, self.home.y
+
+    def _leave_home(self):
+        if self.in_home:
+            self.in_home = False
+            if self.home and self.home.alive:
+                self.home.set_hidden(False)
+                # Hop out in front of it so you can see both.
+                self.y = min(self.home.y + 12 * self.s, self.max_y)
+
+    def _items_path(self):
+        return os.path.join(config.config_dir(), "items.json")
+
+    def _save_items(self):
+        if self.selftest:
+            return
+        data = [{"kind": i.kind, "x": round(i.x), "y": round(i.y)} for i in self.items]
+        try:
+            os.makedirs(config.config_dir(), exist_ok=True)
+            with open(self._items_path(), "w", encoding="utf-8") as f:
+                json.dump(data, f)
+        except OSError:
+            pass
+
+    def _load_items(self):
+        if self.selftest:
+            return
+        try:
+            with open(self._items_path(), "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            return
+        for entry in data if isinstance(data, list) else []:
+            try:
+                kind, x, y = entry["kind"], float(entry["x"]), float(entry["y"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if kind in KINDS:
+                item = Item(self, kind, min(max(x, self.min_x), self.max_x), min(max(y, self.min_y), self.max_y))
+                self.items.append(item)
+                if item.home:
+                    self.home = item
+        self.root.lift()
+
     # --- behaviour ------------------------------------------------------------------------
 
-    def start(self, action, dur=None):
-        if self.action == "play" and action != "play":
-            self.ball = None
+    def start(self, action, dur=None, toy=None):
         self.action, self.action_t, self.action_dur = action, 0.0, dur
         self.hop = 0.0
+        self.play_step = None
         if action == "walk":
-            span = self.max_x - self.min_x
-            if span < 50 * self.s:
-                self.target_x = self.x
-            else:
-                for _ in range(10):
-                    self.target_x = random.uniform(self.min_x, self.max_x)
-                    if abs(self.target_x - self.x) > min(140 * self.s, span / 3):
-                        break
+            self.target = self._random_spot()
         elif action == "play":
-            bx = self.x + self.facing * 95 * self.s
-            if not self.min_x - 110 * self.s < bx < self.max_x + 110 * self.s:
-                self.facing = -self.facing
-                bx = self.x + self.facing * 95 * self.s
-            self.ball = {"x": bx, "v": 0.0, "spin": 0.0}
+            self.toy = toy or self._nearest_toy()
+            if self.toy is None:
+                self.action = "sit"
+                self.action_dur = 2
+                return
             self.play_step, self.step_t, self.step_dur = "stalk", 0.0, 0.0
             self.pounces, self.pounce_goal = 0, random.randint(2, 4)
+        elif action == "scratch":
+            self.post = next((i for i in self.items if i.kind == "post"), None)
+            self.play_step = "go"
+
+    def _random_spot(self):
+        best = (self.x, self.y)
+        for _ in range(12):
+            spot = (random.uniform(self.min_x, self.max_x), random.uniform(self.min_y, self.max_y))
+            if math.hypot(spot[0] - self.x, spot[1] - self.y) > 160 * self.s:
+                return spot
+            best = spot
+        return best
+
+    def _nearest_toy(self):
+        toys = [i for i in self.items if i.toy]
+        return min(toys, key=lambda i: math.hypot(i.x - self.x, i.y - self.y)) if toys else None
 
     def next_action(self):
-        options = {"walk": 30, "sit": 18, "sleep": 16, "play": 16, "groom": 12}
+        has_toy = any(i.toy for i in self.items)
+        has_post = any(i.kind == "post" for i in self.items)
+        if self.home and not self.in_home:
+            if self.home.alive:
+                self.start("gohome")
+                return
+            self.home = None
+        if self.in_home:
+            # Living in the bed: mostly lounging, now and then popping out to play.
+            options = {"sit": 30, "sleep": 45, "groom": 15}
+            if has_toy:
+                options["play"] = 6
+            if has_post:
+                options["scratch"] = 4
+            if self.home.kind == "cushion":
+                options["sleep"] = 70
+        else:
+            options = {"walk": 30, "sit": 16, "sleep": 12, "groom": 12}
+            if has_toy:
+                options["play"] = 20
+            if has_post:
+                options["scratch"] = 10
         if self.action == "sleep":
-            options.pop("sleep")
-        if self.action == "play":
-            options["play"] = 4
+            options.pop("sleep", None)
         pick = random.choices(list(options), weights=list(options.values()))[0]
+        if pick in ("play", "scratch"):
+            self._leave_home()
         durations = {"sit": (3, 7), "sleep": (25, 70), "groom": (3.5, 6)}
+        if self.in_home:
+            durations = {"sit": (8, 20), "sleep": (40, 120), "groom": (4, 7)}
         lo_hi = durations.get(pick)
         self.start(pick, random.uniform(*lo_hi) if lo_hi else None)
 
-    def move_toward(self, tx, speed, dt):
+    def move_toward(self, tx, ty, speed, dt):
         tx = min(max(tx, self.min_x), self.max_x)
-        dist = tx - self.x
-        if abs(dist) < 3 * self.s:
+        ty = min(max(ty, self.min_y), self.max_y)
+        dx, dy = tx - self.x, ty - self.y
+        dist = math.hypot(dx, dy)
+        if dist < 3 * self.s:
             return True
-        self.facing = 1 if dist > 0 else -1
-        step = min(abs(dist), speed * dt)
-        self.x += self.facing * step
+        # Always face left or right, whichever way the walk leans.
+        if abs(dx) > 2 * self.s:
+            self.facing = 1 if dx > 0 else -1
+        step = min(dist, speed * dt)
+        self.x += dx / dist * step
+        self.y += dy / dist * step
         self.phase += step / (4.5 * self.s)
         self.moving = True
-        return abs(dist) <= step
+        return dist <= step
 
-    def pointer_x(self):
+    def pointer(self):
         try:
-            return self.root.winfo_pointerx()
+            return self.root.winfo_pointerx(), self.root.winfo_pointery()
         except tk.TclError:
-            return self.x
+            return self.x, self.y
 
     def face_pointer(self):
-        px = self.pointer_x()
+        px, _ = self.pointer()
         if abs(px - self.x) > 20 * self.s:
             self.facing = 1 if px > self.x else -1
 
+    def _beside_pointer(self):
+        """Where to stand to yell at you: next to the mouse, on the side the cat is already on."""
+        px, py = self.pointer()
+        side = 1 if self.x >= px else -1
+        return px + side * 80 * self.s, py + 70 * self.s
+
     def react_to(self, st):
         """Watcher mood beats whatever the cat felt like doing."""
-        if self.dragging or self.falling:
+        if self.dragging:
             return
         mood, a = st["mood"], self.action
         if mood in (w.MAD, w.CLOSING) and not (mood == w.CLOSING and a == "smug"):
             if a not in ("approach", "angry"):
                 if a == "sleep":
                     self.say("!!", 1.2)
+                self._leave_home()
                 self.start("approach")
         elif mood == w.SUSPICIOUS:
             if a not in ("sus", "approach", "angry"):
@@ -241,18 +406,29 @@ class CatApp:
         self.action_t += dt
         s = self.s
         if a == "walk":
-            if self.move_toward(self.target_x, 55 * s, dt):
+            if self.move_toward(*self.target, 55 * s, dt):
+                self.next_action()
+        elif a == "gohome":
+            if not (self.home and self.home.alive):
+                self.home = None
+                self.next_action()
+            elif self.move_toward(self.home.x, self.home.y, 70 * s, dt):
+                self._enter_home()
                 self.next_action()
         elif a == "play":
             self.update_play(dt)
+        elif a == "scratch":
+            self.update_scratch(dt)
         elif a == "sus":
             self.face_pointer()
         elif a == "approach":
-            if self.move_toward(self.pointer_x(), 200 * s, dt):
+            if self.move_toward(*self._beside_pointer(), 200 * s, dt):
+                self.face_pointer()
                 self.start("angry")
         elif a == "angry":
             self.face_pointer()
-            if abs(self.pointer_x() - self.x) > 260 * s and self.min_x < self.pointer_x() < self.max_x:
+            tx, ty = self._beside_pointer()
+            if math.hypot(tx - self.x, ty - self.y) > 240 * s:
                 self.start("approach")
         elif self.action_dur is not None and self.action_t >= self.action_dur:
             if a == "smug" and st["mood"] == w.CALM:
@@ -261,44 +437,37 @@ class CatApp:
                 self.next_action()
 
     def update_play(self, dt):
-        s, b = self.s, self.ball
-        b["x"] += b["v"] * dt
-        b["spin"] += b["v"] * dt / (11 * s)
-        b["v"] *= max(0.0, 1 - 2.8 * dt)
-        edge_l, edge_r = self.min_x - self.W / 2 + 14 * s, self.max_x + self.W / 2 - 14 * s
-        if not edge_l <= b["x"] <= edge_r:
-            b["x"] = min(max(b["x"], edge_l), edge_r)
-            b["v"] = -b["v"] * 0.5
-        dx = b["x"] - self.x
-        if abs(dx) > 125 * s:  # keep it inside the window
-            b["x"] = self.x + math.copysign(125 * s, dx)
-            b["v"] = 0.0
-            dx = b["x"] - self.x
-
-        self.step_t += dt
-        side = 1 if dx >= 0 else -1
-        if self.action_t > 30:
+        s, toy = self.s, self.toy
+        if toy is None or not toy.alive or self.action_t > 40:
             self.start("sit", 3)
-        elif self.play_step == "stalk":
-            if abs(b["v"]) < 25 * s:
-                if abs(dx) <= 80 * s or self.move_toward(b["x"] - side * 70 * s, 40 * s, dt):
+            return
+        self.step_t += dt
+        dx = toy.x - self.x
+        side = 1 if dx >= 0 else -1
+        moving_toy = math.hypot(toy.vx, toy.vy) > 25 * s
+        if self.play_step == "stalk":
+            if not moving_toy:
+                far = math.hypot(dx, toy.y - self.y) > 300 * s
+                if self.move_toward(toy.x - side * 60 * s, toy.y, (150 if far else 60) * s, dt):
                     self.facing = side
                     self.play_step, self.step_t = "crouch", 0.0
-                    self.step_dur = random.uniform(0.7, 1.6)
+                    self.step_dur = random.uniform(0.6, 1.4)
         elif self.play_step == "crouch":
             self.facing = side
             if self.step_t >= self.step_dur:
                 self.play_step, self.step_t = "pounce", 0.0
-                self.jump = (self.x, min(max(b["x"] - side * 16 * s, self.min_x), self.max_x))
+                self.jump = (self.x, self.y, toy.x - side * 14 * s, toy.y)
         elif self.play_step == "pounce":
             k = min(1.0, self.step_t / 0.42)
-            self.x = self.jump[0] + (self.jump[1] - self.jump[0]) * k
+            x0, y0, x1, y1 = self.jump
+            self.x, self.y = x0 + (x1 - x0) * k, y0 + (y1 - y0) * k
             self.hop = math.sin(math.pi * k) * 34 * s
             if k >= 1:
                 self.hop = 0.0
-                b["v"] = self.facing * random.uniform(150, 260) * s
+                toy.vx = self.facing * random.uniform(200, 340) * s
+                toy.vy = random.uniform(-90, 90) * s
                 if random.random() < 0.25:
-                    b["v"] *= -0.6  # it squirts out the other way
+                    toy.vx *= -0.6  # it squirts out the other way
                 self.pounces += 1
                 self.play_step = "stalk" if self.pounces < self.pounce_goal else "done"
                 self.step_t = 0.0
@@ -307,19 +476,28 @@ class CatApp:
             if random.random() < 0.5:
                 self.say("hehe", 1.5)
 
-    def update_physics(self, dt):
-        if self.falling:
-            self.vy += 2400 * self.s * dt
-            self.win_y += self.vy * dt
-            if self.win_y >= self.ground_y:
-                self.win_y, self.vy, self.falling = self.ground_y, 0.0, False
-                self.start("sit", 2)
-                self.say("mrrp!", 1.5)
-        elif not self.dragging:
-            self.win_y = self.ground_y
-        self.win_y = min(self.win_y, self.ground_y)
-        self.x = min(max(self.x, self.min_x), self.max_x)
+    def update_scratch(self, dt):
+        post = self.post
+        if post is None or not post.alive:
+            self.start("sit", 2)
+            return
+        side = 1 if self.x < post.x else -1
+        if self.play_step == "go":
+            if self.move_toward(post.x - side * 26 * self.s, post.y, 70 * self.s, dt):
+                self.facing = side
+                self.play_step, self.action_t = "scratch", 0.0
+                self.say(random.choice(["scritch scritch", "*scratch scratch*", "sharpening claws"]), 2.5)
+        elif self.play_step == "scratch":
+            post.shake = 0.15
+            if self.action_t > 4.5:
+                self.next_action()
 
+    def update_physics(self, dt):
+        if not self.dragging:
+            self.x = min(max(self.x, self.min_x), self.max_x)
+            self.y = min(max(self.y, self.min_y), self.max_y)
+        for item in self.items:
+            item.update(dt)
         for h in self.hearts:
             h["y"] -= 30 * self.s * dt
             h["x"] += math.sin(self.t * 4 + h["wob"]) * 12 * self.s * dt
@@ -341,7 +519,7 @@ class CatApp:
             st = self._apply_demo(st)
             self.react_to(st)
             self.moving = False
-            if not (self.dragging or self.falling):
+            if not self.dragging:
                 self.update_action(dt, st)
             self.update_physics(dt)
             self.render(st)
@@ -366,7 +544,7 @@ class CatApp:
         return dict(st, mood=w.MAD, remaining=st["total"] * left / 15.0)
 
     def _place(self):
-        self.root.geometry(f"{self.W}x{self.H}+{int(self.x - self.W / 2)}+{int(self.win_y)}")
+        self.root.geometry(f"{self.W}x{self.H}+{int(self.x - self.W / 2)}+{int(self.y - self.foot)}")
 
     # --- drawing --------------------------------------------------------------------------
 
@@ -375,34 +553,47 @@ class CatApp:
         cv.delete("all")
         pal = self.look
         a = self.action
-        ox, oy = self.W / 2, self.H - 6 * s - self.hop
+        n = self.px
+        ox, oy = self.W / 2, self.foot - self.hop
         if a == "angry":
             ox += math.sin(t * 40) * 1.5 * s
+        # While the cat is in its bed, the bed is drawn here instead of in its own window, so the
+        # cat can sit inside the box (back, cat, then the front on top) or lie on the cushion.
+        bed = self.home.kind if self.in_home and self.home else None
+        if bed == "box":
+            draw_art(cv, ox, self.foot - len(BOX_FRONT) * n, BOX_BACK, "box", n)
+            oy = self.foot - SINK["box"] * n
+        elif bed == "cushion":
+            draw_art(cv, ox, self.foot, CUSHION, "cushion", n)
+            oy = self.foot - (len(CUSHION) - SINK["cushion"]) * n
         p = d.Pen(cv, ox, oy, s, self.facing, pal)
         blink = (t % 4.3) < 0.13
         open_eyes = "closed" if blink else "open"
         head = (0, -64)  # where the bubble points
         anchor = None
+        pose = "happy" if (a == "scratch" and self.play_step == "scratch") else a
+        if a in ("gohome", "scratch") and pose != "happy":
+            pose = "walk"
 
         if pal["style"] == "sprite":
-            walking = self.moving or a in ("walk", "approach")
-            head = sprites.draw_action(p, a, t, self.phase if walking else 0.0, getattr(self, "play_step", None))
-            if a == "sleep":
+            walking = self.moving or pose in ("walk", "approach")
+            head = sprites.draw_action(p, pose, t, self.phase if walking else 0.0, self.play_step)
+            if pose == "sleep":
                 d.zzz(cv, p.X(head[0]), p.Y(head[1] - 30), s, t, "#3A3340")
-            if a in ("angry", "approach") and int(t * 4) % 2 == 0:
-                sprites.anger_mark(cv, p.X(head[0] + 14 * p.f), p.Y(head[1] - 40), sprites.pixel_size(s))
-        elif a in ("walk", "approach"):
-            face = {"eyes": "angry", "mouth": "frown", "ears": "back", "angry": True} if a == "approach" \
+            if pose in ("angry", "approach") and int(t * 4) % 2 == 0:
+                sprites.anger_mark(cv, p.X(head[0] + 14 * p.f), p.Y(head[1] - 40), n)
+        elif pose in ("walk", "approach"):
+            face = {"eyes": "angry", "mouth": "frown", "ears": "back", "angry": True} if pose == "approach" \
                 else {"eyes": open_eyes, "mouth": "w"}
-            anchor = d.pose_walk(p, t, self.phase, face=face, amp=1.3 if a == "approach" else 1.0)
+            anchor = d.pose_walk(p, t, self.phase, face=face, amp=1.3 if pose == "approach" else 1.0)
             head = (28, -50)
-        elif a == "sleep":
+        elif pose == "sleep":
             anchor = d.pose_sleep(p, t)
             d.zzz(cv, p.X(26), p.Y(-58), s, t, pal["line"])
             head = (22, -24)
-        elif a == "groom":
+        elif pose == "groom":
             anchor = d.pose_sit(p, t, face={"eyes": "closed", "mouth": "tongue"}, groom=True)
-        elif a == "play":
+        elif pose == "play":
             face = {"eyes": "wide", "mouth": "o"}
             if self.play_step == "crouch":
                 anchor = d.pose_walk(p, t, 0.0, face=face, amp=0.0, crouch=1.0, wiggle=1.0)
@@ -410,36 +601,37 @@ class CatApp:
                 anchor = d.pose_walk(p, t, 0.0, face=face, amp=0.0, stretch=1.0)
             else:
                 anchor = d.pose_walk(p, t, self.phase, face=face if self.moving else {"eyes": open_eyes, "mouth": "w"},
-                            amp=1.0 if self.moving else 0.0)
+                                     amp=1.0 if self.moving else 0.0)
             head = (28, -50)
-        elif a == "sus":
+        elif pose == "sus":
             anchor = d.pose_sit(p, t, face={"eyes": "sus", "mouth": "frown", "look": 1.0}, tail_speed=1.2, tail_amp=3)
-        elif a == "angry":
+        elif pose == "angry":
             yelling = (t % 1.6) < 0.9
             anchor = d.pose_sit(p, t, face={"eyes": "angry", "mouth": "yell" if yelling else "frown", "ears": "back",
-                                   "angry": True},
-                       puff=True, paw=max(0.0, math.sin(t * 7)), tail_speed=9, tail_amp=8)
-        elif a == "happy":
+                                            "angry": True},
+                                puff=True, paw=max(0.0, math.sin(t * 7)), tail_speed=9, tail_amp=8)
+        elif pose == "happy":
             anchor = d.pose_sit(p, t, face={"eyes": "happy", "mouth": "w"}, tail_speed=6, tail_amp=8)
-        elif a == "smug":
+        elif pose == "smug":
             anchor = d.pose_sit(p, t, face={"eyes": "smug", "mouth": "smug"}, tail_speed=1.5)
-        elif a == "held":
+        elif pose == "held":
             anchor = d.pose_sit(p, t, face={"eyes": "wide", "mouth": "o"}, tail_speed=10, tail_amp=5)
         else:
-            look = (self.pointer_x() - self.x) / (250 * s) * self.facing
+            px, _ = self.pointer()
+            look = (px - self.x) / (250 * s) * self.facing
             anchor = d.pose_sit(p, t, face={"eyes": open_eyes, "mouth": "w", "look": max(-1.0, min(1.0, look))})
 
         if pal["style"] == "pixel" and anchor:
             head = anchor
         elif pal["minimal"]:
-            head = (22, -30) if a == "sleep" else (d.BLOB_HEAD[0], d.BLOB_HEAD[1] - 8)
+            head = (22, -30) if pose == "sleep" else (d.BLOB_HEAD[0], d.BLOB_HEAD[1] - 8)
 
-        if self.ball is not None:
-            r = 11 * s
-            d.yarn(cv, self.W / 2 + (self.ball["x"] - self.x), self.H - 6 * s - r, r, self.ball["spin"])
+        if bed == "box":
+            draw_art(cv, ox, self.foot, BOX_FRONT, "box", n)
 
         for h in self.hearts:
-            d.heart(cv, h["x"], h["y"], h["size"] * min(1.0, h["life"] * 1.5), pixelated=pal["style"] in ("pixel", "sprite"))
+            d.heart(cv, h["x"], h["y"], h["size"] * min(1.0, h["life"] * 1.5),
+                    pixelated=pal["style"] in ("pixel", "sprite"))
 
         text = None
         if a == "angry":
@@ -462,23 +654,35 @@ class CatApp:
     # --- mouse ----------------------------------------------------------------------------
 
     def _on_press(self, e):
-        self._press = (e.x_root, e.y_root, self.x, self.win_y)
+        self._press = (e.x_root, e.y_root, self.x, self.y)
 
     def _on_drag(self, e):
         if not self._press:
             return
         px, py, x0, y0 = self._press
         if not self.dragging and math.hypot(e.x_root - px, e.y_root - py) > 6:
-            self.dragging, self.falling = True, False
+            self.dragging = True
+            self._leave_home()
             self.start("held")
         if self.dragging:
             self.x = x0 + (e.x_root - px)
-            self.win_y = y0 + (e.y_root - py)
+            self.y = y0 + (e.y_root - py)
 
     def _on_release(self, e):
         self._press = None
         if self.dragging:
-            self.dragging, self.falling, self.vy = False, True, 0.0
+            self.dragging = False
+            self.x = min(max(self.x, self.min_x), self.max_x)
+            self.y = min(max(self.y, self.min_y), self.max_y)
+            bed = next((i for i in self.items if i.home and i.contains(self.x, self.y, 20 * self.s)), None)
+            if bed:
+                self.home = bed
+                self._enter_home()
+                self.say("mine now.", 2)
+                self.start("sit", 6)
+            else:
+                self.start("sit", 2)
+                self.say("mrrp!", 1.5)
             return
         self.pet()
 
@@ -511,6 +715,17 @@ class CatApp:
         else:
             m.add_command(label=f"Take a {self.cfg['break_minutes']} min break", command=self._take_break)
         m.add_command(label="Show me the angry cat (demo)", command=self._demo)
+        m.add_separator()
+        toys = tk.Menu(m, tearoff=0)
+        for kind in ("yarn", "mouse", "post"):
+            toys.add_command(label=KINDS[kind]["label"], command=lambda k=kind: self.add_item(k))
+        m.add_cascade(label="Give a toy", menu=toys)
+        beds = tk.Menu(m, tearoff=0)
+        for kind in ("box", "cushion"):
+            beds.add_command(label=KINDS[kind]["label"], command=lambda k=kind: self.add_item(k))
+        m.add_cascade(label="Give a bed (it'll stay there)", menu=beds)
+        if self.items:
+            m.add_command(label="Put all toys and beds away", command=self.clear_items)
         m.add_separator()
         if winsys.IS_WIN:
             self._autostart = tk.BooleanVar(value=winsys.get_autostart())
@@ -644,6 +859,33 @@ def _selftest(app, server):
             assert app.cfg["fur_color"] == d.PRESETS["Tuxedo"][0] and app.cfg["ear_shape"] == "folded"
             assert app.W == int(300 * 1.3 * app.dpi)
             app.root.after(400, step, i + 1)
+        elif i == len(seq) + 1:
+            # Toys: play with a thrown yarn ball, then a toy mouse and the scratching post.
+            yarn = app.add_item("yarn")
+            yarn.vx, yarn.vy = 300.0, 80.0
+            app.item_dropped(yarn, True)
+            app.add_item("mouse")
+            app.add_item("post")
+            app.root.after(2500, step, i + 1)
+        elif i == len(seq) + 2:
+            assert app.action == "play", app.action
+            app.start("scratch")
+            app.root.after(1500, step, i + 1)
+        elif i == len(seq) + 3:
+            # Beds: the box becomes home; drawing the cat inside it and on the cushion.
+            box = app.add_item("box")
+            app._enter_home()
+            assert app.in_home and box.hidden
+            for pose in ("sit", "sleep", "groom"):
+                app.start(pose, 5)
+                app.render(app.watcher.status())
+            cushion = app.add_item("cushion")
+            assert app.home is cushion and not app.in_home
+            app._enter_home()
+            app.render(app.watcher.status())
+            app.clear_items()
+            assert not app.items and app.home is None
+            app.root.after(300, step, i + 1)
         else:
             app._demo()
             threading.Thread(target=run_selftest_client, args=(server.port, result), daemon=True).start()
