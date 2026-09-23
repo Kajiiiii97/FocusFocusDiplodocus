@@ -1,0 +1,38 @@
+name: build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Selftest (animations + tab close flow)
+        run: python -m focuscat --selftest
+      - name: Build exe
+        run: |
+          python -m pip install pyinstaller
+          python -m PyInstaller --noconfirm --onefile --windowed --name FocusCat FocusCat.pyw
+      - name: Selftest the built exe
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\FocusCat.exe -ArgumentList "--selftest" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "exe selftest failed with $($p.ExitCode)" }
+      - name: Package Firefox extension
+        shell: pwsh
+        run: |
+          Compress-Archive -Path extension\* -DestinationPath focus-cat-link.zip
+          Move-Item focus-cat-link.zip dist\focus-cat-link.xpi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FocusCat-windows
+          path: |
+            dist/FocusCat.exe
+            dist/focus-cat-link.xpi

@@ -1,0 +1,24 @@
+{
+  "manifest_version": 2,
+  "name": "Focus Cat Link",
+  "version": "1.0.0",
+  "description": "Lets the Focus Cat desktop app see which tab you're on, so it can get mad at doomscrolling and close the tab.",
+  "permissions": ["tabs", "http://127.0.0.1:47321/*"],
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": true
+  },
+  "icons": {
+    "48": "icon.svg",
+    "96": "icon.svg"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "focus-cat-link@focusfocusdiplodocus",
+      "strict_min_version": "109.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  }
+}
