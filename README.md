@@ -62,7 +62,10 @@ Right-click the cat. The top line should say "Mochi can see Firefox ✓". Then c
 - **Drag it** somewhere and let go. Drop it on its bed and it'll stay there.
 - **Give it toys** (right-click the cat, **Give a toy**): a yarn ball, a toy mouse, or a scratching post. It plays with them on its own. Drag a toy next to it, or throw one (drag and let go mid-motion), and it'll chase it right away.
 - **Give it a bed** (right-click, **Give a bed**): a cardboard box or a cushion. While there's a bed out, the cat lives in it: it sits in the box or naps on the cushion instead of wandering into your way, and only pops out to play now and then. It still comes out to yell at you if you doomscroll. Right-click the bed and put it away to let the cat roam again.
-- Toys and beds can be dragged anywhere, stay where you left them next time, and go away with a right-click.
+- **Feed it** (right-click, **Feed**): a treat, which it runs over and gobbles (sometimes followed by a sugar rush), or a food bowl. Every so often it gets hungry and goes to eat from the bowl, which then stays empty until you click it to fill it up again.
+- **Laser pointer** (right-click, **Laser pointer**): a red dot rides along with your mouse and the cat chases it all over the screen, pouncing when it gets close. Clicks go straight through the dot, so you can keep working. It gets tired after a while, flops down panting, then goes again. Turn it off from the same menu.
+- Every now and then it gets **the zoomies** and sprints around the screen for no reason.
+- Toys, beds and bowls can be dragged anywhere, stay where you left them next time, and go away with a right-click.
 - **Right-click** for the menu:
   - take a 15 min break (it naps and ignores Shorts until the break is over)
   - demo mode

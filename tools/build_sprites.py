@@ -41,6 +41,8 @@ ANIMS = {
     "pounce_l": (63, True), "pounce_r": (64, True),
     "hiss_l": (60, True), "hiss_r": (61, True),
     "happy": (65, True), "meow": (43, True),
+    "run_l": (11, True), "run_r": (10, True),
+    "eat_l": (32, True), "eat_r": (34, True),
 }
 
 

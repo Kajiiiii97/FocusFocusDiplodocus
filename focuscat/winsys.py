@@ -14,6 +14,8 @@ RUN_NAME = "FocusCat"
 GWL_EXSTYLE = -20
 WS_EX_TOOLWINDOW = 0x00000080
 WS_EX_NOACTIVATE = 0x08000000
+WS_EX_TRANSPARENT = 0x00000020
+WS_EX_LAYERED = 0x00080000
 
 
 def enable_dpi_awareness():
@@ -58,6 +60,20 @@ def set_no_activate(root, enabled):
             style |= WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW
         else:
             style &= ~WS_EX_NOACTIVATE
+        user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+    except Exception:
+        pass
+
+
+def set_click_through(root):
+    """Let every click go through this window to whatever is underneath."""
+    if not IS_WIN:
+        return
+    try:
+        user32 = ctypes.windll.user32
+        hwnd = _hwnd(root)
+        style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+        style |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW
         user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
     except Exception:
         pass

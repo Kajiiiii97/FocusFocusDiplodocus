@@ -17,7 +17,7 @@ from focuscat import config, winsys
 from focuscat import drawing as d
 from focuscat import sprites
 from focuscat import watcher as w
-from focuscat.items import BOX_BACK, BOX_FRONT, CUSHION, KINDS, SINK, Item, draw_art
+from focuscat.items import BOX_BACK, BOX_FRONT, CUSHION, KINDS, SINK, Item, LaserDot, draw_art
 from focuscat.server import ReportServer
 from focuscat.settings_window import SettingsWindow
 
@@ -35,6 +35,7 @@ MAD_LINES = [
 CLOSED = ["closed it. you're welcome ♥", "gone. go drink some water", "bonk. tab's gone ♥"]
 PETS = ["prrr ♥", "mrrp ♥", "purrrrr", "♥"]
 NO_PETS = ["no pets. close it.", "don't try to bribe me.", "pets won't save u"]
+NOMS = ["nom nom ♥", "*crunch crunch*", "delicious ♥", "more pls"]
 
 
 def log_error():
@@ -85,7 +86,12 @@ class CatApp:
         self.hearts = []
         self.toy = None
         self.post = None
+        self.target_item = None  # the bowl or treat it's heading for
         self.play_step = None
+        self.hunger = 0.3  # 0 = full, 1 = starving; a bowl gets visited from about 0.6
+        self.last_beg = -1e9
+        self.laser = None
+        self.laser_rest_until = 0.0
         self.bubble_text, self.bubble_until = None, 0.0
         self.demo_until = 0.0
         self.action = None
@@ -186,8 +192,26 @@ class CatApp:
         elif item.toy and self.calm():
             self.say("!", 1.2)
             self.start("play", toy=item)
+        elif kind == "treat":
+            if self.calm():
+                self._leave_home()
+                self.say("!!", 1)
+                self.start("snack", item=item)
+            else:
+                self.say("...a treat won't fix this.", 2.5)
         self._save_items()
         return item
+
+    def fill_bowl(self, bowl):
+        if not bowl.full:
+            bowl.full = True
+            bowl.refresh()
+            if self.calm() and self.hunger > 0.6:
+                self._leave_home()
+                self.start("eat", item=bowl)
+            else:
+                self.say("ooh, food ♥", 2)
+            self._save_items()
 
     def remove_item(self, item):
         if item is self.home:
@@ -197,12 +221,26 @@ class CatApp:
             self.toy = None
         if item is self.post:
             self.post = None
+        if item is self.target_item:
+            self.target_item = None
         if item in self.items:
             self.items.remove(item)
         item.destroy()
-        if self.action in ("play", "scratch", "gohome"):
+        if self.action in ("play", "scratch", "gohome", "eat", "snack", "beg") and not self.target_valid():
             self.start("sit", 2)
         self._save_items()
+
+    def target_valid(self):
+        a = self.action
+        if a == "play":
+            return self.toy is not None and self.toy.alive
+        if a == "scratch":
+            return self.post is not None and self.post.alive
+        if a in ("eat", "snack", "beg"):
+            return self.target_item is not None and self.target_item.alive
+        if a == "gohome":
+            return self.home is not None and self.home.alive
+        return True
 
     def clear_items(self):
         for item in list(self.items):
@@ -217,10 +255,30 @@ class CatApp:
             self.start("play", toy=item)
         elif item.home and item is not self.home:
             self.home = item
+        elif item.kind == "treat" and self.calm() and self.action != "snack":
+            self._leave_home()
+            self.start("snack", item=item)
         self._save_items()
 
     def calm(self):
         return not self.dragging and self.action not in ("approach", "angry", "sus", "smug")
+
+    # --- laser pointer --------------------------------------------------------------------
+
+    def toggle_laser(self, on=None):
+        on = self.laser is None if on is None else on
+        if on and self.laser is None:
+            self.laser = LaserDot(self)
+            if self.calm():
+                self._leave_home()
+                self.say("!!!", 1.2)
+                self.start("laser")
+        elif not on and self.laser is not None:
+            self.laser.destroy()
+            self.laser = None
+            if self.action == "laser":
+                self.start("sit", 3)
+                self.say(random.choice(["where'd it go??", "...i almost had it", "it's gone :("]), 2.5)
 
     def _enter_home(self):
         if self.home and not self.in_home:
@@ -242,7 +300,8 @@ class CatApp:
     def _save_items(self):
         if self.selftest:
             return
-        data = [{"kind": i.kind, "x": round(i.x), "y": round(i.y)} for i in self.items]
+        data = [{"kind": i.kind, "x": round(i.x), "y": round(i.y), "full": i.full}
+                for i in self.items if i.kind != "treat"]
         try:
             os.makedirs(config.config_dir(), exist_ok=True)
             with open(self._items_path(), "w", encoding="utf-8") as f:
@@ -263,8 +322,10 @@ class CatApp:
                 kind, x, y = entry["kind"], float(entry["x"]), float(entry["y"])
             except (KeyError, TypeError, ValueError):
                 continue
-            if kind in KINDS:
+            if kind in KINDS and kind != "treat":
                 item = Item(self, kind, min(max(x, self.min_x), self.max_x), min(max(y, self.min_y), self.max_y))
+                item.full = bool(entry.get("full", True))
+                item.refresh()
                 self.items.append(item)
                 if item.home:
                     self.home = item
@@ -272,10 +333,19 @@ class CatApp:
 
     # --- behaviour ------------------------------------------------------------------------
 
-    def start(self, action, dur=None, toy=None):
+    def start(self, action, dur=None, toy=None, item=None):
         self.action, self.action_t, self.action_dur = action, 0.0, dur
         self.hop = 0.0
         self.play_step = None
+        if action in ("eat", "snack", "beg"):
+            self.target_item = item
+            self.play_step = "go"
+        elif action == "zoomies":
+            self.spots = [self._random_spot() for _ in range(random.randint(4, 7))]
+            self.say(random.choice(["!!!", "brrrrr", "ZOOM"]), 1.2)
+        elif action == "laser":
+            self.play_step, self.step_t = "chase", 0.0
+            self.laser_tired_at = self.t + random.uniform(35, 55)
         if action == "walk":
             self.target = self._random_spot()
         elif action == "play":
@@ -304,6 +374,21 @@ class CatApp:
         return min(toys, key=lambda i: math.hypot(i.x - self.x, i.y - self.y)) if toys else None
 
     def next_action(self):
+        if self.laser is not None and self.t >= self.laser_rest_until:
+            self._leave_home()
+            self.start("laser")
+            return
+        bowl = next((i for i in self.items if i.kind == "food"), None)
+        if bowl and self.hunger > 0.6:
+            if bowl.full:
+                self._leave_home()
+                self.start("eat", item=bowl)
+                return
+            if self.hunger > 0.85 and self.t - self.last_beg > 600:
+                self.last_beg = self.t
+                self._leave_home()
+                self.start("beg", item=bowl)
+                return
         has_toy = any(i.toy for i in self.items)
         has_post = any(i.kind == "post" for i in self.items)
         if self.home and not self.in_home:
@@ -318,6 +403,7 @@ class CatApp:
                 options["play"] = 6
             if has_post:
                 options["scratch"] = 4
+            options["zoomies"] = 2
             if self.home.kind == "cushion":
                 options["sleep"] = 70
         else:
@@ -326,10 +412,11 @@ class CatApp:
                 options["play"] = 20
             if has_post:
                 options["scratch"] = 10
+            options["zoomies"] = 5
         if self.action == "sleep":
             options.pop("sleep", None)
         pick = random.choices(list(options), weights=list(options.values()))[0]
-        if pick in ("play", "scratch"):
+        if pick in ("play", "scratch", "zoomies"):
             self._leave_home()
         durations = {"sit": (3, 7), "sleep": (25, 70), "groom": (3.5, 6)}
         if self.in_home:
@@ -419,6 +506,16 @@ class CatApp:
             self.update_play(dt)
         elif a == "scratch":
             self.update_scratch(dt)
+        elif a in ("eat", "snack", "beg"):
+            self.update_food(dt)
+        elif a == "zoomies":
+            if self.move_toward(*self.spots[0], 380 * s, dt):
+                self.spots.pop(0)
+                if not self.spots:
+                    self.start("sit", 4)
+                    self.say(random.choice(["hff hff", "*pant pant*", "...what was that"]), 2)
+        elif a == "laser":
+            self.update_laser(dt)
         elif a == "sus":
             self.face_pointer()
         elif a == "approach":
@@ -476,6 +573,75 @@ class CatApp:
             if random.random() < 0.5:
                 self.say("hehe", 1.5)
 
+    def update_food(self, dt):
+        item, a = self.target_item, self.action
+        if item is None or not item.alive:
+            self.start("sit", 2)
+            return
+        side = 1 if self.x < item.x else -1
+        if self.play_step == "go":
+            gap = 34 if item.kind == "food" else 24
+            speed = 200 if a == "snack" else 80
+            if self.move_toward(item.x - side * gap * self.s, item.y, speed * self.s, dt):
+                self.facing = side
+                self.play_step, self.action_t = "at", 0.0
+                if a == "beg":
+                    self.say(random.choice(["the bowl is empty...", "feed me? :(", "mrow. food?"]), 3)
+                elif a == "eat" and not item.full:
+                    self.say("oh. empty.", 2)
+                    self.start("sit", 3)
+        elif self.play_step == "at":
+            if a == "beg":
+                if self.action_t > 3.5:
+                    self.start("sit", 5)
+            elif self.action_t > (5.0 if a == "eat" else 2.5):
+                self.say(random.choice(NOMS), 2)
+                self.burst_hearts(3)
+                if a == "eat":
+                    item.full = False
+                    item.refresh()
+                    self.hunger = 0.0
+                    self._save_items()
+                else:
+                    self.hunger = max(0.0, self.hunger - 0.3)
+                    self.remove_item(item)
+                if a == "snack" and random.random() < 0.35:
+                    self.start("zoomies")  # sugar rush
+                else:
+                    self.start("happy", 2)
+
+    def update_laser(self, dt):
+        dot, s = self.laser, self.s
+        if dot is None:
+            self.start("sit", 2)
+            return
+        if self.t > self.laser_tired_at:
+            # Out of breath. Flop down for a bit, then go again if the dot's still there.
+            self.laser_rest_until = self.t + 10
+            self.start("sleep", 8)
+            self.say("*pant pant*", 2.5)
+            return
+        self.step_t += dt
+        tx, ty = dot.x, dot.y
+        if self.play_step == "chase":
+            dist = math.hypot(tx - self.x, ty - self.y)
+            if dist < 60 * s:
+                self.facing = 1 if tx >= self.x else -1
+                self.play_step, self.step_t = "pounce", 0.0
+                self.jump = (self.x, self.y, tx, ty)
+            else:
+                self.move_toward(tx, ty, (300 if dist > 250 * s else 190) * s, dt)
+        elif self.play_step == "pounce":
+            k = min(1.0, self.step_t / 0.3)
+            x0, y0, x1, y1 = self.jump
+            self.x, self.y = x0 + (x1 - x0) * k, y0 + (y1 - y0) * k
+            self.hop = math.sin(math.pi * k) * 26 * s
+            if k >= 1:
+                self.hop = 0.0
+                self.play_step, self.step_t = "wait", 0.0
+        elif self.play_step == "wait" and self.step_t > 0.25:
+            self.play_step = "chase"
+
     def update_scratch(self, dt):
         post = self.post
         if post is None or not post.alive:
@@ -493,6 +659,9 @@ class CatApp:
                 self.next_action()
 
     def update_physics(self, dt):
+        self.hunger = min(1.0, self.hunger + dt / (20 * 60))
+        if self.laser is not None:
+            self.laser.follow()
         if not self.dragging:
             self.x = min(max(self.x, self.min_x), self.max_x)
             self.y = min(max(self.y, self.min_y), self.max_y)
@@ -574,9 +743,17 @@ class CatApp:
         pose = "happy" if (a == "scratch" and self.play_step == "scratch") else a
         if a in ("gohome", "scratch") and pose != "happy":
             pose = "walk"
+        if a in ("eat", "snack", "beg"):
+            if self.play_step == "go":
+                pose = "zoomies" if a == "snack" else "walk"
+            else:
+                pose = {"eat": "eat", "snack": "eat", "beg": "beg"}[a]
+        if pal["style"] != "sprite":
+            # The drawn styles don't have running or eating poses; use the closest ones.
+            pose = {"zoomies": "walk", "laser": "walk", "eat": "groom", "beg": "sit"}.get(pose, pose)
 
         if pal["style"] == "sprite":
-            walking = self.moving or pose in ("walk", "approach")
+            walking = self.moving or pose in ("walk", "approach", "zoomies")
             head = sprites.draw_action(p, pose, t, self.phase if walking else 0.0, self.play_step)
             if pose == "sleep":
                 d.zzz(cv, p.X(head[0]), p.Y(head[1] - 30), s, t, "#3A3340")
@@ -724,8 +901,15 @@ class CatApp:
         for kind in ("box", "cushion"):
             beds.add_command(label=KINDS[kind]["label"], command=lambda k=kind: self.add_item(k))
         m.add_cascade(label="Give a bed (it'll stay there)", menu=beds)
+        food = tk.Menu(m, tearoff=0)
+        food.add_command(label="A treat", command=lambda: self.add_item("treat"))
+        food.add_command(label="A food bowl", command=lambda: self.add_item("food"))
+        m.add_cascade(label="Feed", menu=food)
+        self._laser_var = tk.BooleanVar(value=self.laser is not None)
+        m.add_checkbutton(label="Laser pointer (on your mouse)", variable=self._laser_var,
+                          command=lambda: self.toggle_laser(self._laser_var.get()))
         if self.items:
-            m.add_command(label="Put all toys and beds away", command=self.clear_items)
+            m.add_command(label="Put all toys, beds and food away", command=self.clear_items)
         m.add_separator()
         if winsys.IS_WIN:
             self._autostart = tk.BooleanVar(value=winsys.get_autostart())
@@ -885,6 +1069,27 @@ def _selftest(app, server):
             app.render(app.watcher.status())
             app.clear_items()
             assert not app.items and app.home is None
+            # Food: a full bowl gets eaten from when hungry, a treat gets gobbled.
+            bowl = app.add_item("food")
+            app.hunger = 0.9
+            app.next_action()
+            assert app.action == "eat", app.action
+            app.add_item("treat")
+            assert app.action == "snack", app.action
+            app.root.after(3500, step, i + 1)
+        elif i == len(seq) + 4:
+            assert not any(it.kind == "treat" for it in app.items), "treat should be eaten"
+            app.start("zoomies")
+            app.toggle_laser(True)
+            assert app.action == "laser"
+            app.root.after(1500, step, i + 1)
+        elif i == len(seq) + 5:
+            app.toggle_laser(False)
+            assert app.laser is None and app.action != "laser"
+            app.start("zoomies")
+            app.root.after(800, step, i + 1)
+        elif i == len(seq) + 6:
+            app.clear_items()
             app.root.after(300, step, i + 1)
         else:
             app._demo()

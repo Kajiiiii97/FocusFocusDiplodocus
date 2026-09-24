@@ -83,12 +83,39 @@ def _cushion(w=44):
 
 CUSHION = _cushion()
 
+BOWL = [".....K.KK..KK.K....",
+        "...KkKKkKKKkKKkK...",
+        "..OOOOOOOOOOOOOOO..",
+        ".OBBBBBBBBBBBBBBBO.",
+        "OBBHHHHHHHHHHHHHBBO",
+        ".OBBBBBBBBBBBBBBBO.",
+        "..OBBBBBBBBBBBBBO..",
+        "...OOOOOOOOOOOOO..."]
+BOWL_EMPTY = ["." * 19, "." * 19, "..OOOOOOOOOOOOOOO..", ".OIIIIIIIIIIIIIIIO."] + BOWL[4:]
+
+TREAT = ["...OOOOO..O",
+         "..OYYYYYOOO",
+         ".OYEYYYYYYO",
+         "..OyyyyyOOO",
+         "...OOOOO..O"]
+
+LASER = ["..rrr..",
+         ".rRRRr.",
+         "rRWWWRr",
+         "rRWWWRr",
+         "rRWWWRr",
+         ".rRRRr.",
+         "..rrr.."]
+
 COLORS = {
     "yarn": {"O": OUTLINE, "B": "#E0607E", "D": "#B23A5A", "H": "#F5A3B7"},
     "mouse": {"O": OUTLINE, "G": "#A7A7B3", "E": OUTLINE, "P": "#E48AA0", "T": "#E48AA0"},
     "post": {"O": OUTLINE, "C": "#8E7CC3", "c": "#6F5DA6", "R": "#D8B57A", "r": "#B48F55"},
     "box": {"O": "#5A3A1E", "K": "#B98A55", "I": "#6B4A2A", "B": "#D4A56A", "D": "#B98A55", "T": "#E9D3A8"},
     "cushion": {"O": "#7A3E55", "C": "#E7A0B6", "H": "#F6CBD8", "D": "#C07A93"},
+    "food": {"O": "#6E2A22", "B": "#E86F5C", "H": "#F5A493", "I": "#8E3B30", "K": "#9A5B2E", "k": "#C47B45"},
+    "treat": {"O": "#6B4214", "Y": "#F2B84B", "y": "#D9952E", "E": OUTLINE},
+    "laser": {"R": "#FF2A2A", "r": "#FF8A8A", "W": "#FFE3E3"},
 }
 
 KINDS = {
@@ -97,6 +124,8 @@ KINDS = {
     "post": {"label": "Scratching post"},
     "box": {"label": "Cardboard box", "home": True},
     "cushion": {"label": "Cushion", "home": True},
+    "food": {"label": "Food bowl"},
+    "treat": {"label": "Treat", "snack": True},
 }
 
 # How far into a bed the cat's feet sink, in art pixels: the box front hides the legs.
@@ -112,6 +141,12 @@ def grids(kind, frame=0, facing=1):
         return [POST]
     if kind == "box":
         return [BOX_BACK + BOX_FRONT]
+    if kind == "food":
+        return [BOWL if frame else BOWL_EMPTY]
+    if kind == "treat":
+        return [TREAT if facing > 0 else [row[::-1] for row in TREAT]]
+    if kind == "laser":
+        return [LASER]
     return [CUSHION]
 
 
@@ -134,6 +169,7 @@ class Item:
         self.shake = 0.0
         self.hidden = False
         self.alive = True
+        self.full = True  # food bowls start filled
         self._press = None
         self._drawn = None
         self.win = tk.Toplevel(app.root)
@@ -208,7 +244,7 @@ class Item:
     def refresh(self):
         if not self.alive:
             return
-        frame = int(self.spin) % 4
+        frame = (1 if self.full else 0) if self.kind == "food" else int(self.spin) % 4
         n = self.app.px
         state = (frame, self.facing, n)
         w, h = self.size()
@@ -250,6 +286,9 @@ class Item:
             return
         self._press = None
         (t0, x0, y0), (t1, x1, y1) = self._track[0], (self.app.t, e.x_root, e.y_root)
+        if self.kind == "food" and math.hypot(x1 - x0, y1 - y0) < 5:
+            self.app.fill_bowl(self)  # a click (not a drag) on the bowl fills it up
+            return
         thrown = False
         if self.toy and t1 - t0 > 0.01:
             vx, vy = (x1 - x0) / (t1 - t0), (y1 - y0) / (t1 - t0)
@@ -261,6 +300,8 @@ class Item:
 
     def _on_menu(self, e):
         m = tk.Menu(self.win, tearoff=0)
+        if self.kind == "food":
+            m.add_command(label="Fill it up", command=lambda: self.app.fill_bowl(self))
         m.add_command(label=f"Put the {KINDS[self.kind]['label'].lower()} away",
                       command=lambda: self.app.remove_item(self))
         winsys.set_no_activate(self.win, False)
@@ -273,3 +314,36 @@ class Item:
                 winsys.set_no_activate(self.win, True)
             except tk.TclError:
                 pass
+
+
+class LaserDot:
+    """The red dot. It sits on the mouse pointer and lets every click pass straight through."""
+
+    def __init__(self, app):
+        self.app = app
+        n = app.px
+        self.size = len(LASER) * n
+        self.win = tk.Toplevel(app.root)
+        self.win.overrideredirect(True)
+        self.win.attributes("-topmost", True)
+        try:
+            self.win.attributes("-transparentcolor", app.KEY)
+        except tk.TclError:
+            pass
+        self.cv = tk.Canvas(self.win, width=self.size, height=self.size, bg=app.KEY, highlightthickness=0, bd=0)
+        self.cv.pack()
+        draw_art(self.cv, self.size / 2, self.size, LASER, "laser", n)
+        self.x, self.y = app.pointer()
+        self.follow()
+        self.win.update_idletasks()
+        winsys.set_click_through(self.win)
+
+    def follow(self):
+        self.x, self.y = self.app.pointer()
+        # Just below and right of the arrow's tip, so it doesn't hide what you're pointing at.
+        self.win.geometry(f"{self.size}x{self.size}+{int(self.x + 6)}+{int(self.y + 6)}")
+        self.x += 6 + self.size / 2
+        self.y += 6 + self.size
+
+    def destroy(self):
+        self.win.destroy()

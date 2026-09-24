@@ -29,6 +29,7 @@ ACTIONS = {
     "sleep": (("sleep_l", "sleep_r"), 0.8),
     "angry": (("hiss_l", "hiss_r"), 3), "happy": ("happy", 6), "smug": ("meow", 5),
     "held": ("stand", 8),
+    "zoomies": (("run_l", "run_r"), 14), "eat": (("eat_l", "eat_r"), 5), "beg": ("meow", 5),
 }
 
 
@@ -134,6 +135,12 @@ def draw_action(p, action, t, phase=0.0, play_step=None):
             # Frames of the sheet's pounce: 2 is mid-leap, 3 is the low landing/crouch.
             return draw(p, pounce, {"crouch": 3, "pounce": 2, "done": 4}[play_step])
         action = "walk" if phase else "sit"
+    if action == "laser":
+        if play_step == "pounce":
+            return draw(p, "pounce_l" if f < 0 else "pounce_r", 2)
+        action = "zoomies" if phase else "sit_side"
+    if action == "sit_side":
+        return draw(p, "sit_l" if f < 0 else "sit_r", 0)
     if action == "sit" and (t % 7.0) > 6.5:
         action = "blink"
     name, fps = pick(action, f)
@@ -143,6 +150,8 @@ def draw_action(p, action, t, phase=0.0, play_step=None):
         index = int(t * fps)
     if action == "sleep" or name.startswith("hiss"):
         index %= frame_count(name)
+    if name.startswith("run"):
+        index %= 4  # the gallop; the sheet's 5th frame is it sitting back down
     return draw(p, name, index)
 
 
