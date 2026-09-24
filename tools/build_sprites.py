@@ -54,6 +54,16 @@ def find_eyes(grid):
     return min(xs), max(xs), top
 
 
+def split_teeth(grid):
+    """The sheet uses the eye colour for fangs too. Anything eye-coloured well below the eyes is a
+    tooth (T), so it stays white whatever eye colour you pick."""
+    eyes = [y for y, line in enumerate(grid) for ch in line if ch == "E"]
+    if not eyes:
+        return grid
+    top = min(eyes)
+    return [line.replace("E", "T") if y > top + 2 else line for y, line in enumerate(grid)]
+
+
 def blaze(grid, eyes, side):
     """Mark the tuxedo "curtain" on the face: fur pixels become lowercase-ish role letters
     (c = fur, d = shadow) that two-tone cats paint in their second colour. Only colours change;
@@ -138,7 +148,7 @@ def main():
     for name, (r, feet) in ANIMS.items():
         frames = []
         for c in range(doc["width"] // CELL):
-            grid = to_roles(cell(rows, r, c))
+            grid = split_teeth(to_roles(cell(rows, r, c)))
             if sum(ch != "." for line in grid for ch in line) > 20:  # skip stray specks
                 frames.append(grid)
         # One bounding box for the whole animation so frames don't jitter.

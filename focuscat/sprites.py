@@ -19,6 +19,7 @@ for _a in ANIMS.values():
 OUTLINE = "#120E14"
 MOUTH = "#CA719F"
 MOUTH_DARK = "#190F29"
+TEETH = "#F4F1EE"
 
 # action -> (animation, or (left, right) pair, frames per second)
 ACTIONS = {
@@ -50,7 +51,7 @@ def palette(look):
     if pattern in ("bib", "patches"):
         light = second
     table = {"O": OUTLINE, "F": fur, "S": shadow, "L": light, "P": look["pink"], "E": look["eye"],
-             "M": MOUTH, "N": MOUTH_DARK}
+             "M": MOUTH, "N": MOUTH_DARK, "T": TEETH}
     second_shadow = _mix(second, "#000000", 0.18)
     if pattern == "socks":
         table.update(f=second, s=second_shadow, l=second)
