@@ -55,13 +55,21 @@ def find_eyes(grid):
 
 
 def split_teeth(grid):
-    """The sheet uses the eye colour for fangs too. Anything eye-coloured well below the eyes is a
-    tooth (T), so it stays white whatever eye colour you pick."""
-    eyes = [y for y, line in enumerate(grid) for ch in line if ch == "E"]
+    """The sheet uses the eye colour for teeth too. Those become T, so they stay white whatever eye
+    colour you pick."""
+    rows = [list(line) for line in grid]
+    mouth = {(x, y) for y, line in enumerate(grid) for x, ch in enumerate(line) if ch in "MN"}
+    eyes = [(x, y) for y, line in enumerate(grid) for x, ch in enumerate(line) if ch == "E"]
     if not eyes:
         return grid
-    top = min(eyes)
-    return [line.replace("E", "T") if y > top + 2 else line for y, line in enumerate(grid)]
+    top = min(y for _, y in eyes)
+    for x, y in eyes:
+        # Fangs sit below the eyes (hiss) or right against the open mouth (meow, where the eyes
+        # are closed so the teeth are the only "eye" pixels left).
+        touching = any((x + dx, y + dy) in mouth for dx in (-1, 0, 1) for dy in (-1, 0, 1))
+        if y > top + 2 or touching:
+            rows[y][x] = "T"
+    return ["".join(r) for r in rows]
 
 
 def blaze(grid, eyes, side):
