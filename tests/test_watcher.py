@@ -77,6 +77,20 @@ class WatcherTest(unittest.TestCase):
         self.assertEqual(st["mood"], w.MAD)
         self.assertLessEqual(st["remaining"], 15)
 
+    def test_opening_the_cats_own_menu_does_not_count_as_leaving(self):
+        own = {"active": False}
+        self.w = w.FocusWatcher(self.cfg, clock=self.clock, own_window_active=lambda: own["active"])
+        self.w.tick()
+        self.run_for(20)
+        self.assertEqual(self.w.status()["mood"], w.MAD)
+        own["active"] = True  # right-clicked the cat: Firefox reports it lost focus
+        self.run_for(5, focused=False)
+        self.assertEqual(self.w.status()["mood"], w.MAD)
+        self.assertNotIn("stopped", self.w.pop_events())
+        own["active"] = False  # then you really switched to something else
+        self.run_for(1, focused=False)
+        self.assertEqual(self.w.status()["mood"], w.CALM)
+
     def test_unfocused_firefox_does_not_count(self):
         self.run_for(30, focused=False)
         self.assertEqual(self.w.status()["mood"], w.CALM)

@@ -38,13 +38,16 @@ def is_distracting(url, patterns):
 
 
 class FocusWatcher:
-    def __init__(self, settings, clock=time.monotonic):
+    def __init__(self, settings, clock=time.monotonic, own_window_active=lambda: False):
         self.settings = settings
         self.clock = clock
         self._lock = threading.Lock()
         self._url = ""
         self._tab_id = None
         self._focused = False
+        # Clicking the cat's own windows (its menu, Settings) takes focus from Firefox. That
+        # shouldn't count as leaving the page, so while one of them is active we keep the old state.
+        self._own_window_active = own_window_active
         self._report_at = None
         self._last_tick = None
         self._strike = 0.0  # seconds recently spent doomscrolling
@@ -65,7 +68,8 @@ class FocusWatcher:
         with self._lock:
             self._url = url or ""
             self._tab_id = tab_id if isinstance(tab_id, int) and not isinstance(tab_id, bool) else None
-            self._focused = bool(focused)
+            if focused or not self._own_window_active():
+                self._focused = bool(focused)
             self._report_at = self.clock()
             close, self._close_tab = self._close_tab, None
             if close is not None:

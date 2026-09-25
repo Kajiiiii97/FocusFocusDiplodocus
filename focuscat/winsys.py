@@ -79,6 +79,38 @@ def set_click_through(root):
         pass
 
 
+def foreground_window():
+    """The window you're currently using (0 when unknown)."""
+    if not IS_WIN:
+        return 0
+    try:
+        return ctypes.windll.user32.GetForegroundWindow()
+    except Exception:
+        return 0
+
+
+def restore_foreground(hwnd):
+    if IS_WIN and hwnd:
+        try:
+            ctypes.windll.user32.SetForegroundWindow(hwnd)
+        except Exception:
+            pass
+
+
+def own_window_active():
+    """True while one of this app's own windows (a menu, Settings) is the active window."""
+    if not IS_WIN:
+        return False
+    try:
+        from ctypes import wintypes
+        pid = wintypes.DWORD()
+        ctypes.windll.user32.GetWindowThreadProcessId(ctypes.windll.user32.GetForegroundWindow(),
+                                                      ctypes.byref(pid))
+        return pid.value == os.getpid()
+    except Exception:
+        return False
+
+
 def launch_command():
     if getattr(sys, "frozen", False):
         return f'"{sys.executable}"'

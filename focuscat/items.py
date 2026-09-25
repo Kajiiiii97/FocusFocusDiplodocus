@@ -304,6 +304,7 @@ class Item:
             m.add_command(label="Fill it up", command=lambda: self.app.fill_bowl(self))
         m.add_command(label=f"Put the {KINDS[self.kind]['label'].lower()} away",
                       command=lambda: self.app.remove_item(self))
+        previous = winsys.foreground_window()
         winsys.set_no_activate(self.win, False)
         try:
             self.win.focus_force()
@@ -314,6 +315,7 @@ class Item:
                 winsys.set_no_activate(self.win, True)
             except tk.TclError:
                 pass
+            winsys.restore_foreground(previous)
 
 
 class LaserDot:

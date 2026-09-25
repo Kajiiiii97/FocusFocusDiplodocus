@@ -867,6 +867,7 @@ class CatApp:
         m.add_separator()
         m.add_command(label=f"Quit (bye {name})", command=self.quit)
         # The menu needs a focusable window to close properly when you click elsewhere.
+        previous = winsys.foreground_window()
         winsys.set_no_activate(self.root, False)
         try:
             self.root.focus_force()
@@ -877,6 +878,8 @@ class CatApp:
                 winsys.set_no_activate(self.root, True)
             except tk.TclError:
                 pass  # "Quit" was picked and the window is gone
+            if not (self.settings_window and self.settings_window.alive()):
+                winsys.restore_foreground(previous)  # hand focus back to what you were using
 
     def _take_break(self):
         mins = self.cfg["break_minutes"]
@@ -945,7 +948,7 @@ def main(argv=None):
         cfg = dict(config.DEFAULTS, notice_after_seconds=0.5, close_after_seconds=2.0, port=0)
     else:
         cfg = config.load()
-    watcher = w.FocusWatcher(cfg)
+    watcher = w.FocusWatcher(cfg, own_window_active=winsys.own_window_active)
     try:
         server = ReportServer(watcher, cfg["port"]).start()
     except OSError:
