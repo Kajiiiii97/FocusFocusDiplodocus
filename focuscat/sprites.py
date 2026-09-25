@@ -52,7 +52,7 @@ def palette(look):
     if pattern in ("bib", "patches"):
         light = second
     table = {"O": OUTLINE, "F": fur, "S": shadow, "L": light, "P": look["pink"], "E": look["eye"],
-             "M": MOUTH, "N": MOUTH_DARK, "T": TEETH}
+             "M": MOUTH, "N": MOUTH_DARK, "T": TEETH, "B": look["blush"]}
     second_shadow = _mix(second, "#000000", 0.18)
     if pattern == "socks":
         table.update(f=second, s=second_shadow, l=second)
@@ -71,6 +71,197 @@ def _png(width, height, rgba_rows):
     raw = b"".join(b"\x00" + row for row in rgba_rows)
     return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)) +
             chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+
+
+# --- look tweaks ----------------------------------------------------------------------------
+# The art is fixed, but a few options can be painted onto it: folded ears, bigger eyes, blush and
+# tabby stripes. They only move or recolour pixels near the ears and eyes, frame by frame.
+
+_DIRS = {"up": (0, -1), "left": (-1, 0), "right": (1, 0)}
+_EAR_FUR = set("FSLcdP")
+
+
+def _clusters(g, ch):
+    pts = {(x, y) for y, l in enumerate(g) for x, c in enumerate(l) if c == ch}
+    out = []
+    while pts:
+        stack = [pts.pop()]; comp = set(stack)
+        while stack:
+            x, y = stack.pop()
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    n = (x + dx, y + dy)
+                    if n in pts:
+                        pts.remove(n); comp.add(n); stack.append(n)
+        out.append(comp)
+    return out
+
+
+def _at(rows, x, y):
+    return rows[y][x] if 0 <= y < len(rows) and 0 <= x < len(rows[0]) else "."
+
+
+def _direction(rows, comp):
+    """Which way the ear points: toward its tip, the pixel near it that's furthest from the
+    middle of the cat."""
+    pts = [(x, y) for y, r in enumerate(rows) for x, c in enumerate(r) if c != "."]
+    mx = sum(x for x, _ in pts) / len(pts)
+    my = sum(y for _, y in pts) / len(pts)
+    px = sum(x for x, _ in comp) / len(comp)
+    py = sum(y for _, y in comp) / len(comp)
+    near = [(x, y) for x, y in pts if (x - px) ** 2 + (y - py) ** 2 <= 25]
+    tx, ty = max(near, key=lambda p: (p[0] - mx) ** 2 + (p[1] - my) ** 2)
+    dx, dy = tx - px, ty - py
+    if dy <= -2 or abs(dx) < 2:
+        return "up"
+    return "right" if dx > 0 else "left"
+
+
+def _fold_up(rows, comp):
+    """Fold an upward ear. Works on a copy that's been rotated so 'up' is up."""
+    xs = [x for x, _ in comp]
+    ys = [y for _, y in comp]
+    # Fold halfway down the inner ear, so tall ears end up as flat as short ones.
+    top = min(ys) + (max(ys) - min(ys)) // 2
+    lo, hi = min(xs) - 2, max(xs) + 2
+    # 1. Cut the tip off down to where the ear meets the head.
+    for y in range(0, top):
+        for x in range(max(0, lo), min(len(rows[0]), hi + 1)):
+            rows[y][x] = "."
+    # 2. Cap the cut with an outline, trimming the ends so the corner of the head is rounded.
+    edge = [x for x in range(max(0, lo), min(len(rows[0]), hi + 1)) if rows[top][x] != "."]
+    if top >= 1 and edge:
+        for x in edge:
+            rows[top - 1][x] = "O"
+        rows[top - 1][edge[0]] = "."
+        rows[top - 1][edge[-1]] = "."
+        rows[top][edge[0]] = "O" if rows[top][edge[0]] != "." else "."
+        rows[top][edge[-1]] = "O" if rows[top][edge[-1]] != "." else "."
+    # 3. The folded flap: the top of the inner ear becomes a darker flap with a crease under it;
+    #    the rest of the pink is hidden under the fold.
+    flap_rows = {top, top + 1}
+    for x, y in comp:
+        if rows[y][x] not in _EAR_FUR:
+            continue
+        rows[y][x] = "S" if y in flap_rows else "F"
+    for x in {x for x, y in comp if y == top + 1}:
+        if rows[top + 2][x] in _EAR_FUR:
+            rows[top + 2][x] = "O"
+
+
+def _rot(rows, d):
+    # Turn the grid so the ear points up, and back again.
+    if d == "right":   # rotate 90 deg counter-clockwise
+        return [list(r) for r in zip(*rows)][::-1]
+    if d == "left":    # rotate 90 deg clockwise
+        return [list(r)[::-1] for r in zip(*rows)]
+    return rows
+
+
+def _unrot(rows, d):
+    if d == "right":
+        return [list(r) for r in zip(*rows[::-1])]
+    if d == "left":
+        return [list(r) for r in zip(*rows)][::-1]
+    return rows
+
+
+def _map_point(x, y, rows, d):
+    H, W = len(rows), len(rows[0])
+    if d == "right":
+        return y, W - 1 - x
+    if d == "left":
+        return H - 1 - y, x
+    return x, y
+
+
+def _spikes(rows):
+    """Ears for frames with no pink inner ear (the hiss): the outermost tufts on top of the head."""
+    H, W = len(rows), len(rows[0])
+    col_top = {}
+    for x in range(W):
+        for y in range(H):
+            if rows[y][x] != ".":
+                col_top[x] = y
+                break
+    tops = sorted((x, y) for x, y in col_top.items()
+                  if y < 4 and col_top.get(x - 1, 99) > y and col_top.get(x + 1, 99) > y)
+    if len(tops) < 2:
+        return []
+    return [{(x + i, y + 3) for i in (-1, 0, 1)} for x, y in (tops[0], tops[-1])]
+
+
+# The curled-up sleeper's head is tilted: its upper ear points up, the other one sideways.
+_TILTED = {"sleep_r": "right", "sleep_l": "left"}
+
+
+def fold_ears(g, name=""):
+    rows = [list(l) for l in g]
+    comps = _clusters(g, "P") or _spikes(rows)
+    for comp in comps:
+        if name in _TILTED:
+            d = "up" if min(y for _, y in comp) < 6 else _TILTED[name]
+        else:
+            d = _direction(rows, comp)
+        turned = _rot(rows, d)
+        _fold_up(turned, {_map_point(x, y, rows, d) for x, y in comp})
+        rows = _unrot(turned, d)
+    return ["".join(r) for r in rows]
+
+
+def _big_eyes(g):
+    rows = [list(l) for l in g]
+    for y, line in enumerate(g):
+        for x, ch in enumerate(line):
+            if ch == "E" and y + 1 < len(rows) and rows[y + 1][x] in "FSLcdfslO":
+                rows[y + 1][x] = "E"
+    return ["".join(r) for r in rows]
+
+
+def _blush(g):
+    rows = [list(l) for l in g]
+    for y, line in enumerate(g):
+        for x, ch in enumerate(line):
+            if ch != "E":
+                continue
+            for bx in (x - 1, x):
+                if y + 2 < len(rows) and 0 <= bx < len(rows[0]) and rows[y + 2][bx] in "FSLcdfsl":
+                    rows[y + 2][bx] = "B"
+    return ["".join(r) for r in rows]
+
+
+def _stripes(g):
+    """Tabby stripes: short dark lines down from the top edge, every third column."""
+    rows = [list(l) for l in g]
+    for x in range(0, len(rows[0]), 3):
+        top = next((y for y in range(len(rows)) if rows[y][x] != "."), None)
+        if top is None:
+            continue
+        for y in range(top + 1, min(top + 4, len(rows))):
+            if rows[y][x] == "F":
+                rows[y][x] = "S"
+    return ["".join(r) for r in rows]
+
+
+_tweaked = {}
+
+
+def frame(name, index, look):
+    """One frame's letter grid with the look's tweaks applied (cached)."""
+    key = (name, index, look["ears"], look["eye_style"], look["blush_on"], look["stripes"])
+    grid = _tweaked.get(key)
+    if grid is None:
+        grid = ANIMS[name]["frames"][index]
+        if look["stripes"]:
+            grid = _stripes(grid)
+        if look["ears"] == "folded":
+            grid = fold_ears(grid, name)
+        if look["blush_on"]:
+            grid = _blush(grid)
+        if look["eye_style"] == "big":
+            grid = _big_eyes(grid)
+        _tweaked[key] = grid
+    return grid
 
 
 _cache = {}
@@ -99,7 +290,7 @@ def picture(grid, table, n):
 
 def image(name, index, n, look):
     """A PhotoImage of one cat frame."""
-    return picture(ANIMS[name]["frames"][index], palette(look), n)
+    return picture(frame(name, index, look), palette(look), n)
 
 
 def pixel_size(s):

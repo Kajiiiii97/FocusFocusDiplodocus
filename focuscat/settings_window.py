@@ -9,16 +9,13 @@ from focuscat import drawing as d
 from focuscat import sprites
 
 PREVIEWS = [("Chill", "sit"), ("Walk", "walk"), ("Nap", "sleep"), ("Mad", "angry"), ("Happy", "happy")]
-EAR_LABELS = [("Pointy", "pointy"), ("Round", "round"), ("Folded", "folded")]
-EYE_LABELS = [("Content", "content"), ("Dots", "dots"), ("Big & shiny", "big")]
-STYLE_LABELS = [("Animated", "sprite"), ("Pixel", "pixel"), ("Minimal", "minimal"), ("Outlined", "outlined")]
-# The animated cat's art is fixed, so these only apply to the drawn styles.
-DRAWN_ONLY = ("ear_shape", "eye_style", "stripes", "blush", "whiskers")
+EAR_LABELS = [("Pointy", "pointy"), ("Folded", "folded")]
+EYE_LABELS = [("Normal", "normal"), ("Big", "big")]
 PATTERN_LABELS = [("One color", "solid"), ("Bib", "bib"), ("Socks", "socks"), ("Patches", "patches")]
 COLOR_ROWS = [("Fur", "fur_color"), ("Second color", "second_color"), ("Inner ears", "ear_color"),
               ("Eye color", "eye_color")]
-LOOK_KEYS = ("style", "fur_color", "second_color", "pattern", "ear_color", "eye_color", "ear_shape",
-             "eye_style", "stripes", "blush", "whiskers")
+LOOK_KEYS = ("fur_color", "second_color", "pattern", "ear_color", "eye_color", "ear_shape",
+             "eye_style", "stripes", "blush")
 
 
 class SettingsWindow:
@@ -94,19 +91,15 @@ class SettingsWindow:
             row += 1
 
         self.choice_vars = {}
-        self.drawn_only_widgets = []
         for label, key, options in (("Two-tone", "pattern", PATTERN_LABELS),
-                                    ("Ear shape", "ear_shape", EAR_LABELS), ("Eye shape", "eye_style", EYE_LABELS),
-                                    ("Style", "style", STYLE_LABELS)):
+                                    ("Ears", "ear_shape", EAR_LABELS), ("Eyes", "eye_style", EYE_LABELS)):
             ttk.Label(f, text=label).grid(row=row, column=0, sticky="w", pady=(8, 0))
             var = tk.StringVar(value=self.draft[key])
             var.trace_add("write", lambda *a, k=key, v=var: self.draft.__setitem__(k, v.get()))
             box = ttk.Frame(f)
             box.grid(row=row, column=1, columnspan=3, sticky="w", pady=(8, 0))
             for text, value in options:
-                rb = ttk.Radiobutton(box, text=text, value=value, variable=var)
-                rb.pack(side="left", padx=(0, 8))
-                self.drawn_only_widgets.extend([rb] if key in DRAWN_ONLY else [])
+                ttk.Radiobutton(box, text=text, value=value, variable=var).pack(side="left", padx=(0, 8))
             self.choice_vars[key] = var
             row += 1
 
@@ -114,12 +107,10 @@ class SettingsWindow:
         box = ttk.Frame(f)
         box.grid(row=row, column=1, columnspan=3, sticky="w", pady=(8, 0))
         self.flag_vars = {}
-        for text, key in (("Stripes", "stripes"), ("Blush", "blush"), ("Whiskers", "whiskers")):
+        for text, key in (("Stripes", "stripes"), ("Blush", "blush")):
             var = tk.BooleanVar(value=self.draft[key])
             var.trace_add("write", lambda *a, k=key, v=var: self.draft.__setitem__(k, v.get()))
-            cb = ttk.Checkbutton(box, text=text, variable=var)
-            cb.pack(side="left", padx=(0, 8))
-            self.drawn_only_widgets.append(cb)
+            ttk.Checkbutton(box, text=text, variable=var).pack(side="left", padx=(0, 8))
             self.flag_vars[key] = var
         row += 1
 
@@ -133,21 +124,14 @@ class SettingsWindow:
         self.size_label.grid(row=row, column=3, sticky="w", pady=(8, 0))
 
         self._refresh_swatches()
-        self.choice_vars["style"].trace_add("write", lambda *a: self._update_enabled())
-        self._update_enabled()
         return f
-
-    def _update_enabled(self):
-        state = ["disabled"] if self.draft["style"] == "sprite" else ["!disabled"]
-        for widget in self.drawn_only_widgets:
-            widget.state(state)
 
     def _preset_button(self, parent, name, preset):
         box = ttk.Frame(parent)
         size = int(42 * self.k)
         cv = tk.Canvas(box, width=size, height=size, bg="#2E7DB5", highlightthickness=0, cursor="hand2")
         cv.pack()
-        look = d.make_look(dict(self.draft, style="sprite", **self._preset_values(preset)))
+        look = d.make_look(dict(self.draft, **self._preset_values(preset)))
         d.portrait(d.Pen(cv, size / 2, size - 3 * self.k, 0.34 * self.k, 1, look))
         label = ttk.Label(box, text=name, font=("Segoe UI", 8), cursor="hand2")
         label.pack()
@@ -262,28 +246,10 @@ class SettingsWindow:
         cv.create_line(12 * k, h - 22 * k, w - 12 * k, h - 22 * k, fill="#5B9BC8", width=max(1, round(2 * k)))
         p = d.Pen(cv, w / 2, h - 22 * k, s, 1, look)
         mode = self.mode.get()
-        blink = (t % 3.7) < 0.13
-        if look["style"] == "sprite":
-            head = sprites.draw_action(p, mode, t, t * 9 if mode == "walk" else 0.0)
-            if mode == "sleep":
-                d.zzz(cv, p.X(head[0]), p.Y(head[1] - 30), s, t, "#3A3340")
-            elif mode == "happy":
-                d.heart(cv, p.X(head[0]) + 16 * s, p.Y(head[1] - 44) + math.sin(t * 3) * 4, 14 * s, pixelated=True)
-            elif mode == "angry" and int(t * 4) % 2 == 0:
-                sprites.anger_mark(cv, p.X(head[0] + 14), p.Y(head[1] - 40), sprites.pixel_size(s))
-        elif mode == "walk":
-            d.pose_walk(p, t, t * 9)
-        elif mode == "sleep":
-            d.pose_sleep(p, t)
-            d.zzz(cv, p.X(26), p.Y(-58), s, t, look["line"])
-        elif mode == "angry":
-            yelling = (t % 1.6) < 0.9
-            d.pose_sit(p, t, face={"eyes": "angry", "mouth": "yell" if yelling else "frown", "ears": "back",
-                                   "angry": True}, puff=True, paw=max(0.0, math.sin(t * 7)),
-                       tail_speed=9, tail_amp=8)
+        head = sprites.draw_action(p, mode, t, t * 9 if mode == "walk" else 0.0)
+        if mode == "sleep":
+            d.zzz(cv, p.X(head[0]), p.Y(head[1] - 30), s, t, "#3A3340")
         elif mode == "happy":
-            d.pose_sit(p, t, face={"eyes": "happy", "mouth": "w"}, tail_speed=6, tail_amp=8)
-            d.heart(cv, w / 2 + 34 * s, h - 22 * k - 118 * s + math.sin(t * 3) * 4, 14 * s,
-                    pixelated=look["style"] == "pixel")
-        else:
-            d.pose_sit(p, t, face={"eyes": "closed" if blink else "open", "mouth": "w"})
+            d.heart(cv, p.X(head[0]) + 16 * s, p.Y(head[1] - 44) + math.sin(t * 3) * 4, 14 * s)
+        elif mode == "angry" and int(t * 4) % 2 == 0:
+            sprites.anger_mark(cv, p.X(head[0] + 14), p.Y(head[1] - 40), sprites.pixel_size(s))

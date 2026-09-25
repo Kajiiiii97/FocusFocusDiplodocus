@@ -736,10 +736,6 @@ class CatApp:
             draw_art(cv, ox, self.foot, CUSHION, "cushion", n)
             oy = self.foot - (len(CUSHION) - SINK["cushion"]) * n
         p = d.Pen(cv, ox, oy, s, self.facing, pal)
-        blink = (t % 4.3) < 0.13
-        open_eyes = "closed" if blink else "open"
-        head = (0, -64)  # where the bubble points
-        anchor = None
         pose = "happy" if (a == "scratch" and self.play_step == "scratch") else a
         if a in ("gohome", "scratch") and pose != "happy":
             pose = "walk"
@@ -748,67 +744,19 @@ class CatApp:
                 pose = "zoomies" if a == "snack" else "walk"
             else:
                 pose = {"eat": "eat", "snack": "eat", "beg": "beg"}[a]
-        if pal["style"] != "sprite":
-            # The drawn styles don't have running or eating poses; use the closest ones.
-            pose = {"zoomies": "walk", "laser": "walk", "eat": "groom", "beg": "sit"}.get(pose, pose)
 
-        if pal["style"] == "sprite":
-            walking = self.moving or pose in ("walk", "approach", "zoomies")
-            head = sprites.draw_action(p, pose, t, self.phase if walking else 0.0, self.play_step)
-            if pose == "sleep":
-                d.zzz(cv, p.X(head[0]), p.Y(head[1] - 30), s, t, "#3A3340")
-            if pose in ("angry", "approach") and int(t * 4) % 2 == 0:
-                sprites.anger_mark(cv, p.X(head[0] + 14 * p.f), p.Y(head[1] - 40), n)
-        elif pose in ("walk", "approach"):
-            face = {"eyes": "angry", "mouth": "frown", "ears": "back", "angry": True} if pose == "approach" \
-                else {"eyes": open_eyes, "mouth": "w"}
-            anchor = d.pose_walk(p, t, self.phase, face=face, amp=1.3 if pose == "approach" else 1.0)
-            head = (28, -50)
-        elif pose == "sleep":
-            anchor = d.pose_sleep(p, t)
-            d.zzz(cv, p.X(26), p.Y(-58), s, t, pal["line"])
-            head = (22, -24)
-        elif pose == "groom":
-            anchor = d.pose_sit(p, t, face={"eyes": "closed", "mouth": "tongue"}, groom=True)
-        elif pose == "play":
-            face = {"eyes": "wide", "mouth": "o"}
-            if self.play_step == "crouch":
-                anchor = d.pose_walk(p, t, 0.0, face=face, amp=0.0, crouch=1.0, wiggle=1.0)
-            elif self.play_step == "pounce":
-                anchor = d.pose_walk(p, t, 0.0, face=face, amp=0.0, stretch=1.0)
-            else:
-                anchor = d.pose_walk(p, t, self.phase, face=face if self.moving else {"eyes": open_eyes, "mouth": "w"},
-                                     amp=1.0 if self.moving else 0.0)
-            head = (28, -50)
-        elif pose == "sus":
-            anchor = d.pose_sit(p, t, face={"eyes": "sus", "mouth": "frown", "look": 1.0}, tail_speed=1.2, tail_amp=3)
-        elif pose == "angry":
-            yelling = (t % 1.6) < 0.9
-            anchor = d.pose_sit(p, t, face={"eyes": "angry", "mouth": "yell" if yelling else "frown", "ears": "back",
-                                            "angry": True},
-                                puff=True, paw=max(0.0, math.sin(t * 7)), tail_speed=9, tail_amp=8)
-        elif pose == "happy":
-            anchor = d.pose_sit(p, t, face={"eyes": "happy", "mouth": "w"}, tail_speed=6, tail_amp=8)
-        elif pose == "smug":
-            anchor = d.pose_sit(p, t, face={"eyes": "smug", "mouth": "smug"}, tail_speed=1.5)
-        elif pose == "held":
-            anchor = d.pose_sit(p, t, face={"eyes": "wide", "mouth": "o"}, tail_speed=10, tail_amp=5)
-        else:
-            px, _ = self.pointer()
-            look = (px - self.x) / (250 * s) * self.facing
-            anchor = d.pose_sit(p, t, face={"eyes": open_eyes, "mouth": "w", "look": max(-1.0, min(1.0, look))})
-
-        if pal["style"] == "pixel" and anchor:
-            head = anchor
-        elif pal["minimal"]:
-            head = (22, -30) if pose == "sleep" else (d.BLOB_HEAD[0], d.BLOB_HEAD[1] - 8)
+        walking = self.moving or pose in ("walk", "approach", "zoomies")
+        head = sprites.draw_action(p, pose, t, self.phase if walking else 0.0, self.play_step)
+        if pose == "sleep":
+            d.zzz(cv, p.X(head[0]), p.Y(head[1] - 30), s, t, "#3A3340")
+        if pose in ("angry", "approach") and int(t * 4) % 2 == 0:
+            sprites.anger_mark(cv, p.X(head[0] + 14 * p.f), p.Y(head[1] - 40), n)
 
         if bed == "box":
             draw_art(cv, ox, self.foot, BOX_FRONT, "box", n)
 
         for h in self.hearts:
-            d.heart(cv, h["x"], h["y"], h["size"] * min(1.0, h["life"] * 1.5),
-                    pixelated=pal["style"] in ("pixel", "sprite"))
+            d.heart(cv, h["x"], h["y"], h["size"] * min(1.0, h["life"] * 1.5))
 
         text = None
         if a == "angry":

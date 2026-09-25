@@ -4,7 +4,7 @@ import json
 import os
 import sys
 
-from focuscat.drawing import EAR_SHAPES, EYE_STYLES, PATTERNS, STYLES, is_color, luminance
+from focuscat.drawing import EAR_SHAPES, EYE_STYLES, PATTERNS, is_color, luminance
 
 DEFAULTS = {
     # Local port the Firefox extension talks to. Change it in background.js too if you change it here.
@@ -32,22 +32,20 @@ DEFAULTS = {
     "scale": 1.0,
     "cat_name": "Mochi",
     # Looks. All of these can be changed from the Settings window.
-    "style": "sprite",  # sprite (animated), pixel, minimal or outlined
     "fur_color": "#AA6928",
     "second_color": "#D1AB78",
     "pattern": "bib",  # solid, bib, socks or patches: where the second colour goes
     "ear_color": "#9A877E",
     "eye_color": "#D3DFE1",
-    "ear_shape": "pointy",  # pointy, round or folded
-    "eye_style": "big",  # content, dots or big
+    "ear_shape": "pointy",  # pointy or folded
+    "eye_style": "normal",  # normal or big
     "stripes": False,
     "blush": False,
-    "whiskers": True,
     # Bumped when defaults change in a way old settings files should pick up.
-    "config_version": 2,
+    "config_version": 3,
 }
 
-CHOICES = {"style": STYLES, "ear_shape": EAR_SHAPES, "eye_style": EYE_STYLES, "pattern": PATTERNS}
+CHOICES = {"ear_shape": EAR_SHAPES, "eye_style": EYE_STYLES, "pattern": PATTERNS}
 COLORS = ("fur_color", "second_color", "ear_color", "eye_color")
 
 
@@ -110,14 +108,23 @@ def load(path=None):
 
 
 def _migrate(raw):
-    if not isinstance(raw, dict) or raw.get("config_version", 1) >= 2:
+    if not isinstance(raw, dict):
         return raw
-    # Version 2 brought the animated sprite cat. Switch to it; its eyes are drawn as small light
-    # pixels, so a very dark eye colour picked for the older styles would vanish.
-    raw = dict(raw, style="sprite", config_version=2)
-    eye = raw.get("eye_color")
-    if not is_color(eye) or luminance(eye) < 0.3:
-        raw["eye_color"] = DEFAULTS["eye_color"]
+    version = raw.get("config_version", 1)
+    raw = dict(raw)
+    if version < 2:
+        # Version 2 brought the animated sprite cat. Its eyes are small light pixels, so a very
+        # dark eye colour picked for the old drawn styles would vanish.
+        eye = raw.get("eye_color")
+        if not is_color(eye) or luminance(eye) < 0.3:
+            raw["eye_color"] = DEFAULTS["eye_color"]
+    if version < 3:
+        # Version 3 dropped the drawn styles. Their ear and eye options map onto the sprite's.
+        raw.pop("style", None)
+        raw.pop("whiskers", None)
+        raw["ear_shape"] = "folded" if raw.get("ear_shape") == "folded" else "pointy"
+        raw["eye_style"] = "normal"
+        raw["config_version"] = 3
     return raw
 
 

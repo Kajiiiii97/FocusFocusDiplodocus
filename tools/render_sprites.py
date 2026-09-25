@@ -8,11 +8,15 @@ from focuscat import config, sprites  # noqa: E402
 from focuscat import drawing as d  # noqa: E402
 
 out = sys.argv[1] if len(sys.argv) > 1 else "sprites.png"
-LOOKS = [{}, {"fur_color": "#34343C", "second_color": "#F4F4F4", "eye_color": "#F2D15C", "ear_color": "#C98A9A"},
-         {"fur_color": "#F0A35E", "second_color": "#FFFFFF", "pattern": "socks", "eye_color": "#9BD37A"},
-         {"fur_color": "#BDB5C8", "pattern": "solid"}]
+LOOKS = [{},
+         {"fur_color": "#34343C", "second_color": "#F4F4F4", "eye_color": "#F2D15C", "ear_color": "#C98A9A",
+          "ear_shape": "folded", "blush": True},
+         {"fur_color": "#B8773A", "second_color": "#E3C08E", "eye_color": "#9BD37A", "stripes": True,
+          "eye_style": "big"},
+         {"fur_color": "#F0A35E", "second_color": "#FFFFFF", "pattern": "socks", "eye_color": "#9BD37A",
+          "ear_shape": "folded", "eye_style": "big", "blush": True}]
 ACTS = [("sit", 0), ("walk", 1), ("walk", -1), ("sleep", 1), ("groom", 1), ("play:crouch", 1),
-        ("play:pounce", 1), ("sus", -1), ("angry", 1), ("happy", 1), ("smug", 1), ("held", 1)]
+        ("play:pounce", 1), ("sus", -1), ("angry", 1), ("happy", 1), ("smug", 1), ("eat", 1), ("zoomies", -1)]
 S = float(os.environ.get("SCALE", "1.0"))
 W, H = int(110 * S), int(120 * S)
 root = tk.Tk()
